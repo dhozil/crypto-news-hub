@@ -54,6 +54,16 @@ const NewsFeed = () => {
   });
 
   useEffect(() => {
+  let filtered = [...articles, ...dbArticles]; // ✅ DI SINI
+
+  // semua logic filter kamu (query, tag, sort, dll)
+  ...
+  
+  setFilteredArticles(filtered);
+
+}, [articles, sortBy, selectedTag, searchFilters, dbArticles]);
+
+  useEffect(() => {
     let filtered = [...articles, ...dbArticles];
   const fetchFromDB = async () => {
     const { data, error } = await supabase
