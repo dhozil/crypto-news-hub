@@ -54,17 +54,13 @@ const NewsFeed = () => {
   });
 
   useEffect(() => {
-  let filtered = [...articles, ...dbArticles]; // ✅ DI SINI
+  let filtered = [...articles, ...dbArticles]; 
 
-  // semua logic filter kamu (query, tag, sort, dll)
-  ...
-  
   setFilteredArticles(filtered);
 
 }, [articles, sortBy, selectedTag, searchFilters, dbArticles]);
 
   useEffect(() => {
-    let filtered = [...articles, ...dbArticles];
   const fetchFromDB = async () => {
     const { data, error } = await supabase
       .from("posts")
