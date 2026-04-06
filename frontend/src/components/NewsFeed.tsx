@@ -146,12 +146,23 @@ const NewsFeed = () => {
 
       <SearchFilters onSearchChange={handleSearchChange} />
 
-      <div className="flex justify-between mb-4">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-xl font-bold">Crypto News</h1>
-        <button onClick={handleRefresh}>
-          <RefreshCw />
-        </button>
+
+        <div className="flex gap-2">
+          <button onClick={handleRefresh}>
+            <RefreshCw />
+          </button>
+
+          <button
+            onClick={() => setIsSubmissionOpen(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            Submit
+          </button>
       </div>
+    </div>
 
       {filteredArticles.length === 0 ? (
         <p>No news yet</p>
