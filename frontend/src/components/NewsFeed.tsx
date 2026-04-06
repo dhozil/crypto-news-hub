@@ -1,7 +1,5 @@
 'use client';
 
-console.log("NEWSFEED FILE LOADED");
-
 import { createClient } from "@supabase/supabase-js";
 import { useState, useEffect } from 'react';
 import { useContract } from '@/hooks/useContract';
@@ -10,7 +8,7 @@ import { Article } from '@/hooks/useContract';
 import ArticleCard from './ArticleCard';
 import ArticleSubmission from './ArticleSubmission';
 import SearchFilters from './SearchFilters';
-import { Filter, TrendingUp, Clock, Star, Plus, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 type SortOption = 'latest' | 'trending' | 'quality' | 'discussed';
 
@@ -60,19 +58,17 @@ const NewsFeed = () => {
           id: item.id.toString(),
           title: item.title,
           content: item.content,
-          summary: item.content?.slice(0, 100) || "", // ✅ tambahin
-          source: "Supabase", // ✅ tambahin
+          summary: item.content?.slice(0, 100) || "",
+          source: "Supabase",
           author: "AI Bot",
-          authorAddress: "0x0000000000000000000000000000000000000000", // ✅ dummy
-          timestamp: item.created_at 
-          ? new Date(item.created_at) 
-          : new Date(),
+          authorAddress: "0x0000000000000000000000000000000000000000",
+          timestamp: item.created_at ? new Date(item.created_at) : new Date(),
           tags: ["AI Generated", "Crypto"],
           upvotes: 0,
           downvotes: 0,
           score: 0,
           status: "approved" as const,
-          isAIGenerated: true // ✅ tambahin
+          isAIGenerated: true
         }));
 
         setDbArticles(mapped);
@@ -83,7 +79,7 @@ const NewsFeed = () => {
     fetchFromDB();
   }, []);
 
-  // ✅ FILTER + SORT (GABUNG CONTRACT + DB)
+  // ✅ FILTER + SORT
   useEffect(() => {
     let filtered = [...articles, ...dbArticles];
 
@@ -117,6 +113,7 @@ const NewsFeed = () => {
     });
 
     setFilteredArticles(filtered);
+    console.log("RENDER:", filtered);
 
   }, [articles, dbArticles, sortBy, selectedTag, searchFilters]);
 
@@ -159,14 +156,15 @@ const NewsFeed = () => {
       {filteredArticles.length === 0 ? (
         <p>No news yet</p>
       ) : (
-  filteredArticles.map(article => (
-        <ArticleCard
-          key={article.id}
-          article={article}
-          onUpvote={() => handleUpvote(article.id)}
-          onDownvote={() => handleDownvote(article.id)}
-        />
-      ))}
+        filteredArticles.map(article => (
+          <ArticleCard
+            key={article.id}
+            article={article}
+            onUpvote={() => handleUpvote(article.id)}
+            onDownvote={() => handleDownvote(article.id)}
+          />
+        ))
+      )}
 
       <ArticleSubmission
         isOpen={isSubmissionOpen}
