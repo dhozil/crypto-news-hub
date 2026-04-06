@@ -229,6 +229,51 @@ export const useWallet = () => {
     }
   }, [checkAndSwitchNetwork]);
 
+  // Auto reconnect wallet if already connected
+useEffect(() => {
+  const init = async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const provider = await detectEthereumProvider();
+      if (!provider) return;
+
+      const accounts = await (provider as any).request({
+        method: 'eth_accounts',
+      });
+
+      if (accounts.length > 0) {
+        // Reconnect silently
+        const ethersProvider = new ethers.BrowserProvider(provider as any);
+        const signer = await ethersProvider.getSigner();
+        const address = await signer.getAddress();
+        const balance = await ethersProvider.getBalance(address);
+        const network = await ethersProvider.getNetwork();
+
+        const currentChainId = Number(network.chainId);
+        const correctNetwork = currentChainId === 4221;
+
+        setWallet({
+          isConnected: true,
+          address,
+          provider: ethersProvider,
+          signer,
+          balance: ethers.formatEther(balance),
+          chainId: currentChainId,
+          isLoading: false,
+          error: null,
+          needsNetworkSwitch: !correctNetwork,
+          isCorrectNetwork: correctNetwork,
+        });
+      }
+    } catch (err) {
+      console.error('Auto reconnect failed:', err);
+    }
+  };
+
+  init();
+}, []);
+
   return {
     ...wallet,
     connectWallet,
