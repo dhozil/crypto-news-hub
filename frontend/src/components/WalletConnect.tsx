@@ -2,7 +2,7 @@
 
 // Wallet connect button component
 import { useState } from 'react';
-import { useWallet } from '@/context/WalletProvider';
+import { useWallet } from '@/hooks/WalletProvider';
 import SidebarMenu from './SidebarMenu';
 import { Wallet, AlertCircle, Network, CheckCircle } from 'lucide-react';
 
