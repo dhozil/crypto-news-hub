@@ -67,7 +67,7 @@ const NewsFeed = () => {
           upvotes: 0,
           downvotes: 0,
           score: 0,
-          status: "approved",
+          status: "approved" as const,
           isAIGenerated: true // ✅ tambahin
         }));
 
