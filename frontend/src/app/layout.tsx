@@ -15,20 +15,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
-    </html>
-  );
-}
-
-export default function RootLayout({ children }) {
-  return (
-    <html>
-      <body>
+      <body className="min-h-full flex flex-col">
         <WalletProvider>
           {children}
         </WalletProvider>
