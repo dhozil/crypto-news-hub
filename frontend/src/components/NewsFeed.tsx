@@ -1,5 +1,7 @@
 'use client';
 
+console.log("NEWSFEED FILE LOADED");
+
 import { createClient } from "@supabase/supabase-js";
 import { useState, useEffect } from 'react';
 import { useContract } from '@/hooks/useContract';
@@ -62,7 +64,9 @@ const NewsFeed = () => {
           source: "Supabase", // ✅ tambahin
           author: "AI Bot",
           authorAddress: "0x0000000000000000000000000000000000000000", // ✅ dummy
-          timestamp: new Date(item.created_at),
+          timestamp: item.created_at 
+          ? new Date(item.created_at) 
+          : new Date(),
           tags: ["AI Generated", "Crypto"],
           upvotes: 0,
           downvotes: 0,
@@ -72,6 +76,7 @@ const NewsFeed = () => {
         }));
 
         setDbArticles(mapped);
+        console.log("DB ARTICLES:", mapped);
       }
     };
 
@@ -151,7 +156,10 @@ const NewsFeed = () => {
         </button>
       </div>
 
-      {filteredArticles.map(article => (
+      {filteredArticles.length === 0 ? (
+        <p>No news yet</p>
+      ) : (
+  filteredArticles.map(article => (
         <ArticleCard
           key={article.id}
           article={article}
