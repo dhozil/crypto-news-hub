@@ -32,7 +32,7 @@ const Header = () => {
   };
 
   const navigation = [
-    { name: 'News Feed', href: '/', icon: Newspaper },
+    { name: 'News Feed', href: '/news', icon: Newspaper },
     { name: 'Trending', href: '/trending', icon: TrendingUp },
     { name: 'Community', href: '/community', icon: Users },
     { name: 'Settings', href: '/settings', icon: Settings },
