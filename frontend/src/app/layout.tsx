@@ -3,6 +3,15 @@ import { Inter } from "next/font/google";
 import "../styles/globals.css";
 import Link from "next/link";
 
+export default function Navbar() {
+  return (
+    <nav>
+      <Link href="/">Home</Link>
+      <Link href="/news">News Feed</Link>
+    </nav>
+  );
+}
+
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
@@ -22,14 +31,5 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
-  );
-}
-
-export default function Navbar() {
-  return (
-    <nav>
-      <Link href="/">Home</Link>
-      <Link href="/news">News Feed</Link>
-    </nav>
   );
 }
