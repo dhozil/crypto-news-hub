@@ -1,6 +1,7 @@
 'use client';
 
 // Enhanced NewsFeed component with contract integration
+import { createClient } from "@supabase/supabase-js";
 import { useState, useEffect } from 'react';
 import { useContract } from '@/hooks/useContract';
 import { useGamification } from '@/hooks/useGamification';
@@ -20,6 +21,11 @@ interface SearchState {
   sortBy: string;
 }
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 const NewsFeed = () => {
   const { 
     articles, 
@@ -34,6 +40,7 @@ const NewsFeed = () => {
   const { addXP } = useGamification();
   
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
+  const [dbArticles, setDbArticles] = useState<Article[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('latest');
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [isSubmissionOpen, setIsSubmissionOpen] = useState(false);
@@ -47,7 +54,34 @@ const NewsFeed = () => {
   });
 
   useEffect(() => {
-    let filtered = [...articles];
+  const fetchFromDB = async () => {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase error:", error);
+    } else {
+      const mapped = data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        content: item.content,
+        author: "AI Bot",
+        timestamp: new Date(item.created_at),
+        tags: ["AI Generated", "Crypto"],
+        upvotes: 0,
+        downvotes: 0,
+        score: 0,
+        status: "approved"
+      }));
+
+      setDbArticles(mapped);
+    }
+  };
+
+  fetchFromDB();
+}, []);
 
     // Apply search filters
     if (searchFilters.query) {
