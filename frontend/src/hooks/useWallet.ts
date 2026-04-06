@@ -238,15 +238,16 @@ useEffect(() => {
       const provider = await detectEthereumProvider();
       if (!provider) return;
 
-      const accounts = await (provider as any).request({
-        method: 'eth_accounts',
-      });
+     const accounts = await (provider as any).request({
+       method: 'eth_accounts',
+     });
 
-      if (accounts.length > 0) {
-        // Reconnect silently
+     if (accounts.length > 0) {
+        const selectedAccount = accounts[0];
+
         const ethersProvider = new ethers.BrowserProvider(provider as any);
-        const signer = await ethersProvider.getSigner();
-        const address = await signer.getAddress();
+        const signer = await ethersProvider.getSigner(selectedAccount);
+        const address = selectedAccount;
         const balance = await ethersProvider.getBalance(address);
         const network = await ethersProvider.getNetwork();
 
