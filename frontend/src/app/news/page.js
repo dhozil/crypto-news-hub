@@ -1,10 +1,10 @@
-import Link from "next/link";
+import NewsFeed from "@/components/NewsFeed";
 
-export default function Navbar() {
+export default function NewsPage() {
   return (
-    <nav>
-      <Link href="/">Home</Link>
-      <Link href="/news">News Feed</Link>
-    </nav>
+    <div style={{ padding: "20px" }}>
+      <h1>News Feed</h1>
+      <NewsFeed />
+    </div>
   );
 }
