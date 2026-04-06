@@ -8,7 +8,7 @@ import { Article } from '@/hooks/useContract';
 import ArticleCard from './ArticleCard';
 import ArticleSubmission from './ArticleSubmission';
 import SearchFilters from './SearchFilters';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Plus } from 'lucide-react';
 
 type SortOption = 'latest' | 'trending' | 'quality' | 'discussed';
 
