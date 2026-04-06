@@ -12,12 +12,14 @@
     "@metamask/detect-provider": "^2.0.0",
     "@supabase/supabase-js": "^2.101.1",
     "autoprefixer": "^10.4.27",
+    "bufferutil": "^4.1.0",
     "ethers": "^6.16.0",
     "lucide-react": "^1.7.0",
     "next": "13.5.6",
     "openai": "^6.33.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "utf-8-validate": "^6.0.6",
     "web3": "^4.16.0"
   },
   "devDependencies": {
