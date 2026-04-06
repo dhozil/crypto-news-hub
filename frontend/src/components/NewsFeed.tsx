@@ -58,13 +58,17 @@ const NewsFeed = () => {
           id: item.id.toString(),
           title: item.title,
           content: item.content,
+          summary: item.content?.slice(0, 100) || "", // ✅ tambahin
+          source: "Supabase", // ✅ tambahin
           author: "AI Bot",
+          authorAddress: "0x0000000000000000000000000000000000000000", // ✅ dummy
           timestamp: new Date(item.created_at),
           tags: ["AI Generated", "Crypto"],
           upvotes: 0,
           downvotes: 0,
           score: 0,
-          status: "approved"
+          status: "approved",
+          isAIGenerated: true // ✅ tambahin
         }));
 
         setDbArticles(mapped);
