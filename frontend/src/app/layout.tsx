@@ -1,16 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
-import Link from "next/link";
-
-export default function Navbar() {
-  return (
-    <nav>
-      <Link href="/">Home</Link>
-      <Link href="/news">News Feed</Link>
-    </nav>
-  );
-}
 
 const inter = Inter({
   subsets: ["latin"],
