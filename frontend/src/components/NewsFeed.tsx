@@ -54,6 +54,7 @@ const NewsFeed = () => {
   });
 
   useEffect(() => {
+    let filtered = [...articles, ...dbArticles];
   const fetchFromDB = async () => {
     const { data, error } = await supabase
       .from("posts")
