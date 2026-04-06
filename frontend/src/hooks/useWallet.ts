@@ -1,13 +1,11 @@
 'use client';
 
-// Wallet connection hook for MetaMask integration
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import detectEthereumProvider from '@metamask/detect-provider';
 
-// Network configuration for GenLayer Testnet Chain
 const GENLAYER_NETWORK = {
-  chainId: '0x' + (4221).toString(16), // 0x107D in hex
+  chainId: '0x' + (4221).toString(16),
   chainName: 'GenLayer Testnet Chain',
   nativeCurrency: {
     name: 'GEN',
@@ -16,12 +14,10 @@ const GENLAYER_NETWORK = {
   },
   rpcUrls: [
     'https://rpc.testnet-chain.genlayer.com',
-    'https://testnet-chain.genlayer.com',
     'https://genlayer-testnet.public.blastapi.io'
   ],
   blockExplorerUrls: [
-    'https://explorer.testnet-chain.genlayer.com',
-    'https://testnet-explorer.genlayer.com'
+    'https://explorer.testnet-chain.genlayer.com'
   ],
 };
 
@@ -52,167 +48,97 @@ export const useWallet = () => {
     isCorrectNetwork: false,
   });
 
-  // Check if current network is GenLayer Testnet Chain
-  const isCorrectNetwork = useCallback((chainId: number | null): boolean => {
-    return chainId === 4221; // GenLayer Testnet Chain ID
+  const isCorrectNetwork = useCallback((chainId: number | null) => {
+    return chainId === 4221;
   }, []);
 
-  // Add GenLayer network to wallet
-  const addGenLayerNetwork = useCallback(async (): Promise<boolean> => {
-    if (typeof window === 'undefined') return false;
+  // 🔹 Switch / Add Network
+  const switchNetwork = useCallback(async () => {
+    const provider = await detectEthereumProvider();
+    if (!provider) return;
 
     try {
-      const provider = await detectEthereumProvider();
-      
-      if (!provider) {
-        throw new Error('MetaMask is not installed');
-      }
-
-      // Try to switch to the network first
-      try {
+      await (provider as any).request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: GENLAYER_NETWORK.chainId }],
+      });
+    } catch (err: any) {
+      if (err.code === 4902) {
         await (provider as any).request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: GENLAYER_NETWORK.chainId }],
+          method: 'wallet_addEthereumChain',
+          params: [GENLAYER_NETWORK],
         });
-        return true;
-      } catch (switchError: any) {
-        // This error code indicates that the chain has not been added to MetaMask
-        if (switchError.code === 4902) {
-          await (provider as any).request({
-            method: 'wallet_addEthereumChain',
-            params: [GENLAYER_NETWORK],
-          });
-          return true;
-        } else {
-          throw switchError;
-        }
       }
-    } catch (error: any) {
-      console.error('Failed to add GenLayer network:', error);
-      throw error;
     }
   }, []);
 
-  // Auto-detect and prompt for network switch
-  const checkAndSwitchNetwork = useCallback(async (): Promise<void> => {
-    if (typeof window === 'undefined') return;
-
+  // 🔹 Check Network
+  const checkNetwork = useCallback(async () => {
     try {
       const provider = await detectEthereumProvider();
-      
-      if (!provider) {
-        throw new Error('MetaMask is not installed');
-      }
+      if (!provider) return;
 
       const ethersProvider = new ethers.BrowserProvider(provider as any);
       const network = await ethersProvider.getNetwork();
-      const currentChainId = Number(network.chainId);
+      const chainId = Number(network.chainId);
 
-      if (!isCorrectNetwork(currentChainId)) {
-        setWallet(prev => ({
-          ...prev,
-          needsNetworkSwitch: true,
-          isCorrectNetwork: false,
-          error: `Wrong network detected. Please switch to GenLayer Testnet Chain (Chain ID: 4221). Current: Chain ID ${currentChainId}`,
-        }));
-      } else {
-        setWallet(prev => ({
-          ...prev,
-          needsNetworkSwitch: false,
-          isCorrectNetwork: true,
-          error: null,
-        }));
-      }
-    } catch (error: any) {
-      console.error('Network check failed:', error);
       setWallet(prev => ({
         ...prev,
-        error: 'Failed to check network',
+        chainId,
+        isCorrectNetwork: isCorrectNetwork(chainId),
+        needsNetworkSwitch: !isCorrectNetwork(chainId),
       }));
+    } catch (err) {
+      console.error(err);
     }
   }, [isCorrectNetwork]);
 
+  // 🔹 CONNECT (ONLY 1 ACCOUNT)
   const connectWallet = useCallback(async () => {
-    if (typeof window === 'undefined') return;
-
     setWallet(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
       const provider = await detectEthereumProvider();
-      
-      if (!provider) {
-        throw new Error('MetaMask is not installed');
-      }
+      if (!provider) throw new Error('MetaMask not found');
 
-      // Check and switch network before connecting
-      await checkAndSwitchNetwork();
+      await switchNetwork();
 
       const accounts = await (provider as any).request({
         method: 'eth_requestAccounts',
       });
 
-      const selectedAccount = accounts[0];
+      const address = accounts[0];
 
       const ethersProvider = new ethers.BrowserProvider(provider as any);
-      const signer = await ethersProvider.getSigner(selectedAccount);
-      const address = selectedAccount;
-      const balance = await ethersProvider.getBalance(address);
+      const signer = await ethersProvider.getSigner(address);
+      const balanceRaw = await ethersProvider.getBalance(address);
       const network = await ethersProvider.getNetwork();
 
-      const currentChainId = Number(network.chainId);
-      const correctNetwork = isCorrectNetwork(currentChainId);
+      const chainId = Number(network.chainId);
 
       setWallet({
         isConnected: true,
         address,
         provider: ethersProvider,
         signer,
-        balance: ethers.formatEther(balance),
-        chainId: currentChainId,
+        balance: ethers.formatEther(balanceRaw),
+        chainId,
         isLoading: false,
         error: null,
-        needsNetworkSwitch: !correctNetwork,
-        isCorrectNetwork: correctNetwork,
+        needsNetworkSwitch: !isCorrectNetwork(chainId),
+        isCorrectNetwork: isCorrectNetwork(chainId),
       });
 
-      // Listen for network changes
-      (provider as any).on('chainChanged', (chainId: string) => {
-        const newChainId = parseInt(chainId, 16);
-        setWallet(prev => ({
-          ...prev,
-          chainId: newChainId,
-          isCorrectNetwork: isCorrectNetwork(newChainId),
-          needsNetworkSwitch: !isCorrectNetwork(newChainId),
-        }));
-      });
-
-      // Listen for account changes
-      (provider as any).on('accountsChanged', (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // User disconnected
-          setWallet(prev => ({
-            ...prev,
-            isConnected: false,
-            address: null,
-            signer: null,
-            balance: '0',
-          }));
-        } else {
-          // Account changed, reconnect
-          connectWallet();
-        }
-      });
-
-    } catch (error: any) {
-      console.error('Wallet connection failed:', error);
+    } catch (err: any) {
       setWallet(prev => ({
         ...prev,
         isLoading: false,
-        error: error.message || 'Failed to connect wallet',
+        error: err.message,
       }));
     }
-  }, [checkAndSwitchNetwork, isCorrectNetwork]);
+  }, [switchNetwork, isCorrectNetwork]);
 
+  // 🔹 DISCONNECT (LOCAL ONLY)
   const disconnectWallet = useCallback(() => {
     setWallet({
       isConnected: false,
@@ -228,64 +154,97 @@ export const useWallet = () => {
     });
   }, []);
 
-  // Auto-check network on mount
+  // 🔹 AUTO RECONNECT (NO POPUP)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      checkAndSwitchNetwork();
-    }
-  }, [checkAndSwitchNetwork]);
+    const init = async () => {
+      try {
+        const provider = await detectEthereumProvider();
+        if (!provider) return;
 
-  // Auto reconnect wallet if already connected
-useEffect(() => {
-  const init = async () => {
-    if (typeof window === 'undefined') return;
+        const accounts = await (provider as any).request({
+          method: 'eth_accounts',
+        });
 
-    try {
-      const provider = await detectEthereumProvider();
-      if (!provider) return;
+        if (accounts.length === 0) return;
 
-     const accounts = await (provider as any).request({
-       method: 'eth_accounts',
-     });
-
-     if (accounts.length > 0) {
-        const selectedAccount = accounts[0];
+        const address = accounts[0];
 
         const ethersProvider = new ethers.BrowserProvider(provider as any);
-        const signer = await ethersProvider.getSigner(selectedAccount);
-        const address = selectedAccount;
-        const balance = await ethersProvider.getBalance(address);
+        const signer = await ethersProvider.getSigner(address);
+        const balanceRaw = await ethersProvider.getBalance(address);
         const network = await ethersProvider.getNetwork();
 
-        const currentChainId = Number(network.chainId);
-        const correctNetwork = currentChainId === 4221;
+        const chainId = Number(network.chainId);
 
         setWallet({
           isConnected: true,
           address,
           provider: ethersProvider,
           signer,
-          balance: ethers.formatEther(balance),
-          chainId: currentChainId,
+          balance: ethers.formatEther(balanceRaw),
+          chainId,
           isLoading: false,
           error: null,
-          needsNetworkSwitch: !correctNetwork,
-          isCorrectNetwork: correctNetwork,
+          needsNetworkSwitch: !isCorrectNetwork(chainId),
+          isCorrectNetwork: isCorrectNetwork(chainId),
         });
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      console.error('Auto reconnect failed:', err);
-    }
-  };
+    };
 
-  init();
-}, []);
+    init();
+  }, [isCorrectNetwork]);
+
+  // 🔹 LISTENER (FIX BUG DOUBLE REQUEST)
+  useEffect(() => {
+    let providerRef: any;
+
+    const setup = async () => {
+      const provider = await detectEthereumProvider();
+      if (!provider) return;
+
+      providerRef = provider;
+
+      provider.on('accountsChanged', async (accounts: string[]) => {
+        if (accounts.length === 0) {
+          disconnectWallet();
+        } else {
+          const address = accounts[0];
+
+          const ethersProvider = new ethers.BrowserProvider(provider as any);
+          const signer = await ethersProvider.getSigner(address);
+          const balanceRaw = await ethersProvider.getBalance(address);
+
+          setWallet(prev => ({
+            ...prev,
+            address,
+            signer,
+            balance: ethers.formatEther(balanceRaw),
+          }));
+        }
+      });
+
+      provider.on('chainChanged', () => {
+        window.location.reload();
+      });
+    };
+
+    setup();
+
+    return () => {
+      if (providerRef?.removeListener) {
+        providerRef.removeListener('accountsChanged', () => {});
+        providerRef.removeListener('chainChanged', () => {});
+      }
+    };
+  }, [disconnectWallet]);
 
   return {
     ...wallet,
     connectWallet,
     disconnectWallet,
-    addGenLayerNetwork,
-    checkAndSwitchNetwork,
+    switchNetwork,
+    checkNetwork,
   };
 };
