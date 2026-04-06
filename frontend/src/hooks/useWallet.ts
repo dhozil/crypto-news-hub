@@ -147,9 +147,15 @@ export const useWallet = () => {
       // Check and switch network before connecting
       await checkAndSwitchNetwork();
 
+      const accounts = await (provider as any).request({
+        method: 'eth_requestAccounts',
+      });
+
+      const selectedAccount = accounts[0];
+
       const ethersProvider = new ethers.BrowserProvider(provider as any);
-      const signer = await ethersProvider.getSigner();
-      const address = await signer.getAddress();
+      const signer = await ethersProvider.getSigner(selectedAccount);
+      const address = selectedAccount;
       const balance = await ethersProvider.getBalance(address);
       const network = await ethersProvider.getNetwork();
 
