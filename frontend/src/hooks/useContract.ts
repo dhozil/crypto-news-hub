@@ -34,8 +34,8 @@ const REWARD_SYSTEM_ABI = [
   'function stakeTokens(address user, uint256 amount) returns (bool)',
   'function unstakeTokens(address user, uint256 amount) returns (bool)',
   'function claimRewards(address user) returns (uint256)',
-  'function getPendingRewards(address user) returns (uint256)',
-  'function getVotingPower(address user) returns (uint256)',
+  'function getPendingRewards(address user) view returns (uint256)',
+  'function getVotingPower(address user) view returns (uint256)',
   'event RewardDistributed(address indexed user, uint256 amount, string reason)',
   'event RewardClaimed(address indexed user, uint256 amount)',
   'event TokensStaked(address indexed user, uint256 amount)',
@@ -119,6 +119,7 @@ export const useContract = () => {
       return createMockRewardContract();
     }
     
+    const provider = signer.provider;
     return new ethers.Contract(CONTRACT_ADDRESSES.rewardSystem, REWARD_SYSTEM_ABI, signer);
   }, [signer]);
 
