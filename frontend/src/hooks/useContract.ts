@@ -17,12 +17,12 @@ const RPC_URLS = [
 // Contract ABIs (simplified for GenLayer)
 const CONTENT_REGISTRY_ABI = [
   'function submitArticle(string title, string content, string source, string[] tags, bool isAIGenerated) returns (uint256)',
-  'function getArticle(uint256 articleId) returns (tuple)',
+  'function getArticle(uint256 articleId) view returns (tuple)',
   'function upvoteArticle(uint256 articleId, address voter) returns (bool)',
   'function downvoteArticle(uint256 articleId, address voter) returns (bool)',
-  'function getArticlesByStatus(string status) returns (uint256[])',
-  'function getUserArticles(address user) returns (uint256[])',
-  'function getArticleStats() returns (uint256, uint256, uint256)',
+  'function getArticlesByStatus(string status) view returns (uint256[])',
+  'function getUserArticles(address user) view returns (uint256[])',
+  'function getArticleStats() view returns (uint256, uint256, uint256)',
   'event ArticleSubmitted(uint256 indexed articleId, address indexed author, string title)',
   'event ArticleValidated(uint256 indexed articleId, uint256 score, string status)',
   'event ArticleUpvoted(uint256 indexed articleId, address indexed voter)',
@@ -30,7 +30,7 @@ const CONTENT_REGISTRY_ABI = [
 ];
 
 const REWARD_SYSTEM_ABI = [
-  'function calculateArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes) returns (uint256)',
+  'function calculateArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes) view returns (uint256)',
   'function distributeArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes, uint256 articleId) returns (bool)',
   'function stakeTokens(address user, uint256 amount) returns (bool)',
   'function unstakeTokens(address user, uint256 amount) returns (bool)',
