@@ -2,7 +2,7 @@
 
 // Article submission form component
 import { useState } from 'react';
-import { useContract } from '@/hooks/useContract';
+import { useContract } from '@/hooks/ContractProvider';
 import { useGamification } from '@/hooks/useGamification';
 import { useWallet } from '@/hooks/WalletProvider';
 import { X, Send, FileText, Link, Sparkles, Tag } from 'lucide-react';
