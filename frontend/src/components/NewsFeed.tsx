@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useState, useEffect } from 'react';
-import { useContract } from '@/hooks/useContract';
+import { useContract } from '@/hooks/ContractProvider';
 import { useGamification } from '@/hooks/useGamification';
 import { Article } from '@/hooks/useContract';
 import ArticleCard from './ArticleCard';
