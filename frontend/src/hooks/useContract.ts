@@ -3,7 +3,8 @@
 // Contract integration hooks for GenLayer
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { useWallet } from './useWallet';
+// ✅ FIX 1: Import dari WalletProvider (shared Context), bukan langsung dari useWallet
+import { useWallet } from './WalletProvider';
 import { CONTRACT_ADDRESSES, DEMO_MODE, NETWORK_CONFIG } from '@/config/constants';
 
 // RPC Failover configuration for GenLayer Testnet Chain
@@ -47,7 +48,6 @@ const createProviderWithFailover = async (): Promise<ethers.JsonRpcProvider> => 
   for (const rpcUrl of RPC_URLS) {
     try {
       const provider = new ethers.JsonRpcProvider(rpcUrl);
-      // Test connection
       await provider.getNetwork();
       console.log(`Connected to RPC: ${rpcUrl}`);
       return provider;
@@ -85,10 +85,10 @@ export interface ContractState {
   stakedAmount: string;
 }
 
-// Mock data for demo mode
 import { mockArticles } from '@/data/mockData';
 
 export const useContract = () => {
+  // ✅ FIX 1: Sekarang pakai shared Context, bukan instance baru
   const { signer, isConnected, address } = useWallet();
   const [state, setState] = useState<ContractState>({
     isLoading: false,
@@ -99,124 +99,93 @@ export const useContract = () => {
     stakedAmount: '0',
   });
 
-  // Get contract instances
   const getContentRegistryContract = useCallback(() => {
     if (!signer) return null;
-    
-    // In demo mode, return mock contract
-    if (DEMO_MODE.enabled) {
-      return createMockContract();
-    }
-    
+    if (DEMO_MODE.enabled) return createMockContract();
     return new ethers.Contract(CONTRACT_ADDRESSES.contentRegistry, CONTENT_REGISTRY_ABI, signer);
   }, [signer]);
 
   const getRewardSystemContract = useCallback(() => {
     if (!signer) return null;
-    
-    // In demo mode, return mock contract
-    if (DEMO_MODE.enabled) {
-      return createMockRewardContract();
-    }
-    
-    const provider = signer.provider;
+    if (DEMO_MODE.enabled) return createMockRewardContract();
     return new ethers.Contract(CONTRACT_ADDRESSES.rewardSystem, REWARD_SYSTEM_ABI, signer);
   }, [signer]);
 
-  // Mock contract functions for demo
-  const createMockContract = () => {
-    return {
-      submitArticle: async (title: string, content: string, source: string, tags: string[], isAIGenerated: boolean) => {
-        // Simulate transaction delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return { hash: '0xmockhash' };
-      },
-      getArticle: async (articleId: string) => {
-        const article = mockArticles.find(a => a.id === articleId);
-        if (!article) throw new Error('Article not found');
-        return convertToContractFormat(article);
-      },
-      upvoteArticle: async (articleId: string, voter: string) => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return true;
-      },
-      downvoteArticle: async (articleId: string, voter: string) => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return true;
-      },
-      getArticlesByStatus: async (status: string) => {
-        return mockArticles
-          .filter(a => a.status === status)
-          .map(a => a.id);
-      },
-      getUserArticles: async (user: string) => {
-        return mockArticles
-          .filter(a => a.authorAddress === user)
-          .map(a => a.id);
-      },
-      getArticleStats: async () => {
-        const total = mockArticles.length;
-        const approved = mockArticles.filter(a => a.status === 'approved').length;
-        const pending = mockArticles.filter(a => a.status === 'pending').length;
-        return [total, approved, pending];
-      }
-    };
-  };
+  const createMockContract = () => ({
+    submitArticle: async (title: string, content: string, source: string, tags: string[], isAIGenerated: boolean) => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return { hash: '0xmockhash' };
+    },
+    getArticle: async (articleId: string) => {
+      const article = mockArticles.find(a => a.id === articleId);
+      if (!article) throw new Error('Article not found');
+      return convertToContractFormat(article);
+    },
+    upvoteArticle: async (articleId: string, voter: string) => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return true;
+    },
+    downvoteArticle: async (articleId: string, voter: string) => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return true;
+    },
+    getArticlesByStatus: async (status: string) =>
+      mockArticles.filter(a => a.status === status).map(a => a.id),
+    getUserArticles: async (user: string) =>
+      mockArticles.filter(a => a.authorAddress === user).map(a => a.id),
+    getArticleStats: async () => {
+      const total = mockArticles.length;
+      const approved = mockArticles.filter(a => a.status === 'approved').length;
+      const pending = mockArticles.filter(a => a.status === 'pending').length;
+      return [total, approved, pending];
+    }
+  });
 
-  const createMockRewardContract = () => {
-    return {
-      getPendingRewards: async (user: string) => {
-        return ethers.parseEther('12.5'); // Mock 12.5 GEN pending
-      },
-      getVotingPower: async (user: string) => {
-        return ethers.parseEther('100'); // Mock 100 voting power
-      },
-      claimRewards: async (user: string) => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return ethers.parseEther('12.5');
-      },
-      stakeTokens: async (user: string, amount: bigint) => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return true;
-      }
-    };
-  };
+  const createMockRewardContract = () => ({
+    getPendingRewards: async (_user: string) => ethers.parseEther('12.5'),
+    getVotingPower: async (_user: string) => ethers.parseEther('100'),
+    claimRewards: async (_user: string) => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return ethers.parseEther('12.5');
+    },
+    stakeTokens: async (_user: string, _amount: bigint) => {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return true;
+    }
+  });
 
-  const convertToContractFormat = (article: any) => {
-    return {
-      title: article.title,
-      content: article.content,
-      summary: article.summary,
-      source: article.source,
-      author: article.authorAddress,
-      timestamp: Math.floor(article.timestamp.getTime() / 1000),
-      score: Math.floor(article.score * 1000),
-      upvotes: article.upvotes,
-      downvotes: article.downvotes,
-      tags: article.tags,
-      isAIGenerated: article.isAIGenerated,
-      status: article.status
-    };
-  };
+  const convertToContractFormat = (article: any) => ({
+    title: article.title,
+    content: article.content,
+    summary: article.summary,
+    source: article.source,
+    author: article.authorAddress,
+    timestamp: Math.floor(article.timestamp.getTime() / 1000),
+    score: Math.floor(article.score * 1000),
+    upvotes: article.upvotes,
+    downvotes: article.downvotes,
+    tags: article.tags,
+    isAIGenerated: article.isAIGenerated,
+    status: article.status
+  });
 
-  const convertFromContractFormat = (articleData: any, id: string): Article => {
-    return {
-      id,
-      title: articleData.title,
-      content: articleData.content,
-      summary: articleData.summary,
-      source: articleData.source,
-      author: 'Mock Author', // Would resolve address to name
-      authorAddress: articleData.author,
-      timestamp: new Date(articleData.timestamp * 1000),
-      score: articleData.score.toNumber() / 1000,
-      upvotes: articleData.upvotes.toNumber(),
-      downvotes: articleData.downvotes.toNumber(),
-      tags: articleData.tags,
-      isAIGenerated: articleData.isAIGenerated,
-      status: articleData.status
-    };
-  };
+  const convertFromContractFormat = (articleData: any, id: string): Article => ({
+    id,
+    title: articleData.title,
+    content: articleData.content,
+    summary: articleData.summary,
+    source: articleData.source,
+    author: 'Mock Author',
+    authorAddress: articleData.author,
+    timestamp: new Date(articleData.timestamp * 1000),
+    // ✅ FIX 2: Ganti .toNumber() → Number() — kompatibel dengan ethers v6 BigInt
+    score: Number(articleData.score) / 1000,
+    upvotes: Number(articleData.upvotes),
+    downvotes: Number(articleData.downvotes),
+    tags: articleData.tags,
+    isAIGenerated: articleData.isAIGenerated,
+    status: articleData.status
+  });
 
   // Submit article
   const submitArticle = useCallback(async (
@@ -226,8 +195,9 @@ export const useContract = () => {
     tags: string[],
     isAIGenerated: boolean = false
   ) => {
+    // ✅ FIX 3: Cek isConnected dari shared Context (bukan instance terpisah)
     if (!isConnected || !signer) {
-      throw new Error('Wallet not connected');
+      throw new Error('Wallet not connected. Please connect your MetaMask wallet.');
     }
 
     const contract = getContentRegistryContract();
@@ -237,9 +207,8 @@ export const useContract = () => {
 
     try {
       const tx = await contract.submitArticle(title, content, source, tags, isAIGenerated);
-      
+
       if (DEMO_MODE.enabled) {
-        // In demo mode, add to mock articles
         const newArticle: Article = {
           id: (mockArticles.length + 1).toString(),
           title,
@@ -256,17 +225,17 @@ export const useContract = () => {
           isAIGenerated,
           status: 'pending'
         };
-        
         mockArticles.push(newArticle);
         setState(prev => ({ ...prev, articles: [...mockArticles], isLoading: false }));
       } else {
         await tx.wait();
         await fetchArticles();
       }
-      
+
       return tx.hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit article';
+      // ✅ FIX 3: isLoading selalu di-reset ke false di catch
       setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
       throw error;
     }
@@ -274,6 +243,7 @@ export const useContract = () => {
 
   // Fetch articles
   const fetchArticles = useCallback(async () => {
+    // ✅ FIX 3: Guard — jangan set isLoading jika tidak ada signer
     if (!isConnected || !signer) return;
 
     const contract = getContentRegistryContract();
@@ -283,58 +253,47 @@ export const useContract = () => {
 
     try {
       if (DEMO_MODE.enabled) {
-        // In demo mode, use mock articles
-        setState(prev => ({ 
-          ...prev, 
-          articles: mockArticles.map(a => ({ ...a })), 
-          isLoading: false 
+        setState(prev => ({
+          ...prev,
+          articles: mockArticles.map(a => ({ ...a })),
+          isLoading: false
         }));
         return;
       }
 
-      // Get approved articles
       const approvedArticleIds = await contract.getArticlesByStatus('approved');
-      
       const articles: Article[] = [];
-      
+
       for (const articleId of approvedArticleIds) {
         const articleData = await contract.getArticle(articleId);
         articles.push(convertFromContractFormat(articleData, articleId.toString()));
       }
 
-      // Sort by timestamp (newest first)
       articles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
       setState(prev => ({ ...prev, articles, isLoading: false }));
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch articles';
-      setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
-      
-      // Fallback to mock data on error
-      if (DEMO_MODE.enabled) {
-        setState(prev => ({ 
-          ...prev, 
-          articles: mockArticles.map(a => ({ ...a })), 
-          isLoading: false 
-        }));
-      }
+      // ✅ FIX 3: isLoading selalu false di catch, pakai mock sebagai fallback
+      setState(prev => ({
+        ...prev,
+        error: errorMessage,
+        isLoading: false,
+        articles: DEMO_MODE.enabled ? mockArticles.map(a => ({ ...a })) : prev.articles
+      }));
     }
   }, [isConnected, signer, getContentRegistryContract]);
 
   // Upvote article
   const upvoteArticle = useCallback(async (articleId: string) => {
-    if (!isConnected || !signer) {
-      throw new Error('Wallet not connected');
-    }
+    if (!isConnected || !signer) throw new Error('Wallet not connected');
 
     const contract = getContentRegistryContract();
     if (!contract) throw new Error('Contract not available');
 
     try {
       const tx = await contract.upvoteArticle(articleId, address!);
-      
       if (DEMO_MODE.enabled) {
-        // Update mock article
         const article = mockArticles.find(a => a.id === articleId);
         if (article) {
           article.upvotes += 1;
@@ -344,10 +303,9 @@ export const useContract = () => {
         await tx.wait();
         await fetchArticles();
       }
-      
       return tx.hash;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upvote article';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upvote';
       setState(prev => ({ ...prev, error: errorMessage }));
       throw error;
     }
@@ -355,18 +313,14 @@ export const useContract = () => {
 
   // Downvote article
   const downvoteArticle = useCallback(async (articleId: string) => {
-    if (!isConnected || !signer) {
-      throw new Error('Wallet not connected');
-    }
+    if (!isConnected || !signer) throw new Error('Wallet not connected');
 
     const contract = getContentRegistryContract();
     if (!contract) throw new Error('Contract not available');
 
     try {
       const tx = await contract.downvoteArticle(articleId, address!);
-      
       if (DEMO_MODE.enabled) {
-        // Update mock article
         const article = mockArticles.find(a => a.id === articleId);
         if (article) {
           article.downvotes += 1;
@@ -376,10 +330,9 @@ export const useContract = () => {
         await tx.wait();
         await fetchArticles();
       }
-      
       return tx.hash;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to downvote article';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to downvote';
       setState(prev => ({ ...prev, error: errorMessage }));
       throw error;
     }
@@ -393,13 +346,14 @@ export const useContract = () => {
     if (!contract) return;
 
     try {
-      const pendingRewards = await contract.getPendingRewards(address!);
-      const votingPower = await contract.getVotingPower(address!);
-      
+      const pendingRewards = await contract.getPendingRewards(address);
+      const votingPower = await contract.getVotingPower(address);
+
       setState(prev => ({
         ...prev,
         userRewards: ethers.formatEther(pendingRewards),
-        votingPower: votingPower.toNumber()
+        // ✅ FIX 2: Number() bukan .toNumber() untuk ethers v6
+        votingPower: Number(ethers.formatEther(votingPower))
       }));
     } catch (error) {
       console.error('Failed to fetch user rewards:', error);
@@ -408,9 +362,7 @@ export const useContract = () => {
 
   // Claim rewards
   const claimRewards = useCallback(async () => {
-    if (!isConnected || !signer) {
-      throw new Error('Wallet not connected');
-    }
+    if (!isConnected || !signer) throw new Error('Wallet not connected');
 
     const contract = getRewardSystemContract();
     if (!contract) throw new Error('Contract not available');
@@ -418,10 +370,7 @@ export const useContract = () => {
     try {
       const tx = await contract.claimRewards(address!);
       await tx.wait();
-      
-      // Refresh rewards
       await fetchUserRewards();
-      
       return tx.hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to claim rewards';
@@ -432,9 +381,7 @@ export const useContract = () => {
 
   // Stake tokens
   const stakeTokens = useCallback(async (amount: string) => {
-    if (!isConnected || !signer) {
-      throw new Error('Wallet not connected');
-    }
+    if (!isConnected || !signer) throw new Error('Wallet not connected');
 
     const contract = getRewardSystemContract();
     if (!contract) throw new Error('Contract not available');
@@ -443,10 +390,7 @@ export const useContract = () => {
       const amountWei = ethers.parseEther(amount);
       const tx = await contract.stakeTokens(address!, amountWei);
       await tx.wait();
-      
-      // Refresh user data
       await fetchUserRewards();
-      
       return tx.hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to stake tokens';
@@ -461,7 +405,7 @@ export const useContract = () => {
       fetchArticles();
       fetchUserRewards();
     }
-  }, [isConnected, signer, fetchArticles, fetchUserRewards]);
+  }, [isConnected, signer]);
 
   return {
     ...state,
