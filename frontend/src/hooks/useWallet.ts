@@ -99,22 +99,27 @@ export const useWallet = () => {
 
     try {
       const provider = await detectEthereumProvider();
-      if (!provider) throw new Error('MetaMask not found');
+      if (!provider) throw new Error('MetaMask not found. Please install MetaMask.');
 
-      await switchNetwork();
-
+      // ✅ Step 1: Minta akun DULU (1 popup saja)
       const accounts = await (provider as any).request({
         method: 'eth_requestAccounts',
       });
 
       const address = accounts[0];
-
       const ethersProvider = new ethers.BrowserProvider(provider as any);
+      const network = await ethersProvider.getNetwork();
+      const chainId = Number(network.chainId);
+
+      // ✅ Step 2: Baru switch network SETELAH akun tersambung, dan HANYA jika perlu
+      if (!isCorrectNetwork(chainId)) {
+        await switchNetwork();
+        // Reload akan di-trigger oleh listener chainChanged
+        return;
+      }
+
       const signer = await ethersProvider.getSigner(address);
       const balanceRaw = await ethersProvider.getBalance(address);
-      const network = await ethersProvider.getNetwork();
-
-      const chainId = Number(network.chainId);
 
       setWallet({
         isConnected: true,
@@ -125,15 +130,19 @@ export const useWallet = () => {
         chainId,
         isLoading: false,
         error: null,
-        needsNetworkSwitch: !isCorrectNetwork(chainId),
-        isCorrectNetwork: isCorrectNetwork(chainId),
+        needsNetworkSwitch: false,
+        isCorrectNetwork: true,
       });
 
     } catch (err: any) {
+      // ✅ Handle user reject (code 4001) dengan pesan yang lebih bersih
+      const message = err.code === 4001 
+        ? 'Connection rejected by user.' 
+        : err.message;
       setWallet(prev => ({
         ...prev,
         isLoading: false,
-        error: err.message,
+        error: message,
       }));
     }
   }, [switchNetwork, isCorrectNetwork]);
@@ -200,45 +209,44 @@ export const useWallet = () => {
   useEffect(() => {
     let providerRef: any;
 
-    const setup = async () => {
-      const provider = await detectEthereumProvider();
-      if (!provider) return;
+    const handleAccountsChanged = async (accounts: string[]) => {
+      if (accounts.length === 0) {
+        disconnectWallet();
+      } else {
+        const address = accounts[0];
+        const ethersProvider = new ethers.BrowserProvider(providerRef as any);
+        const signer = await ethersProvider.getSigner(address);
+        const balanceRaw = await ethersProvider.getBalance(address);
+        setWallet(prev => ({
+        ...prev,
+        address,
+        signer,
+        balance: ethers.formatEther(balanceRaw),
+      }));
+    }
+  };
 
-      providerRef = provider;
+  const handleChainChanged = () => {
+    window.location.reload();
+  };
 
-      provider.on('accountsChanged', async (accounts: string[]) => {
-        if (accounts.length === 0) {
-          disconnectWallet();
-        } else {
-          const address = accounts[0];
+  const setup = async () => {
+    const provider = await detectEthereumProvider();
+    if (!provider) return;
+    providerRef = provider;
+    provider.on('accountsChanged', handleAccountsChanged);
+    provider.on('chainChanged', handleChainChanged);
+  };
 
-          const ethersProvider = new ethers.BrowserProvider(provider as any);
-          const signer = await ethersProvider.getSigner(address);
-          const balanceRaw = await ethersProvider.getBalance(address);
+  setup();
 
-          setWallet(prev => ({
-            ...prev,
-            address,
-            signer,
-            balance: ethers.formatEther(balanceRaw),
-          }));
-        }
-      });
-
-      provider.on('chainChanged', () => {
-        window.location.reload();
-      });
-    };
-
-    setup();
-
-    return () => {
-      if (providerRef?.removeListener) {
-        providerRef.removeListener('accountsChanged', () => {});
-        providerRef.removeListener('chainChanged', () => {});
-      }
-    };
-  }, [disconnectWallet]);
+  return () => {
+    if (providerRef?.removeListener) {
+      providerRef.removeListener('accountsChanged', handleAccountsChanged);
+      providerRef.removeListener('chainChanged', handleChainChanged);
+    }
+  };
+}, [disconnectWallet]);
 
   return {
     ...wallet,
