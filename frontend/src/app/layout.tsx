@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
 import { WalletProvider } from '@/hooks/WalletProvider';
+import { ContractProvider } from '@/hooks/ContractProvider';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -24,7 +25,7 @@ export default function RootLayout({
         <WalletProvider>
           <ContractProvider> 
             {children}
-          <ContractProvider> 
+          </ContractProvider> 
         </WalletProvider>
       </body>
     </html>
