@@ -2,7 +2,7 @@
 
 // Simplified sidebar menu component
 import { useState } from 'react';
-import { useWallet } from '@/hooks/useWallet';
+import { useWallet } from '@/hooks/WalletProvider';
 import { X, LogOut } from 'lucide-react';
 
 interface SidebarMenuProps {
