@@ -22,7 +22,9 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider>
-          {children}
+          <ContractProvider> 
+            {children}
+          <ContractProvider> 
         </WalletProvider>
       </body>
     </html>
