@@ -191,9 +191,9 @@ export const useContract = () => {
     content: articleData.content,
     summary: articleData.summary,
     source: articleData.source,
-    author: 'Mock Author',
+    author: articleData.author,
     authorAddress: articleData.author,
-    timestamp: new Date(articleData.timestamp * 1000),
+    timestamp: new Date(Number(articleData.timestamp) * 1000),
     // ✅ FIX 2: Ganti .toNumber() → Number() — kompatibel dengan ethers v6 BigInt
     score: Number(articleData.score) / 1000,
     upvotes: Number(articleData.upvotes),
