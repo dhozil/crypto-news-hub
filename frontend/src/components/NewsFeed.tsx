@@ -180,7 +180,11 @@ const NewsFeed = () => {
       <ArticleSubmission
         isOpen={isSubmissionOpen}
         onClose={() => setIsSubmissionOpen(false)}
-        onSuccess={() => addXP(25, 'Submit')}
+        onSuccess={() => {
+          addXP(25, 'Submit');
+          setIsSubmissionOpen(false); // Tutup form
+          refreshData(); // Refresh articles
+        }}
       />
 
     </div>
