@@ -60,8 +60,15 @@ const ArticleSubmission = ({ isOpen, onClose, onSuccess }: ArticleSubmissionProp
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    console.log('📝 Form submit triggered');
     
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      console.log('❌ Validation failed:', error);
+      return;
+    }
+    
+    console.log('✅ Validation passed, connecting contract...');
+    console.log('Wallet connected:', isConnected);
     
     setIsSubmitting(true);
     setError('');
@@ -72,6 +79,14 @@ const ArticleSubmission = ({ isOpen, onClose, onSuccess }: ArticleSubmissionProp
         .map((tag: string) => tag.trim())
         .filter((tag: string) => tag.length > 0);
 
+      console.log('📤 Calling submitArticle with:', {
+        title: formData.title.trim(),
+        contentLength: formData.content.length,
+        source: formData.source.trim(),
+        tags,
+        isAIGenerated: formData.isAIGenerated
+      });
+
       await submitArticle(
         formData.title.trim(),
         formData.content.trim(),
@@ -79,6 +94,7 @@ const ArticleSubmission = ({ isOpen, onClose, onSuccess }: ArticleSubmissionProp
         tags,
         formData.isAIGenerated
       );
+      console.log('✅ Article submitted successfully');
 
       await addXP(10, 'Submitted article');
 

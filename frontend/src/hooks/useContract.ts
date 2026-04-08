@@ -220,10 +220,13 @@ export const useContract = () => {
     if (!contract) throw new Error('Contract not available');
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
+    console.log('🔌 useContract.submitArticle called with:', { address, title: title.substring(0, 20), contentLength: content.length, source });
 
     try {
+      console.log('⏳ Sending transaction to contract:', CONTRACT_ADDRESSES.contentRegistry);
       // @ts-ignore - Ethers.js v6 ABI parsing issue with bool parameter
       const tx = await contract.submitArticle(address, title, content, source, tags, isAIGenerated);
+      console.log('✅ Transaction sent:', tx.hash);
 
       if (DEMO_MODE.enabled) {
         const newArticle: Article = {
