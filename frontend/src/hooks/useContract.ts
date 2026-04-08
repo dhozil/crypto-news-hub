@@ -16,13 +16,21 @@ const RPC_URLS = [
 
 // Contract ABIs (simplified for GenLayer)
 const CONTENT_REGISTRY_ABI = [
+  // Basic article management
   'function submitArticle(string title, string content, string source, string[] tags, bool isAIGenerated) returns (uint256)',
+  'function submitArticleFromUrl(string author, string url, string[] tags, bool isAIGenerated) returns (uint256)',
   'function getArticle(uint256 articleId) view returns (tuple)',
   'function upvoteArticle(uint256 articleId, address voter) returns (bool)',
   'function downvoteArticle(uint256 articleId, address voter) returns (bool)',
   'function getArticlesByStatus(string status) view returns (uint256[])',
   'function getUserArticles(address user) view returns (uint256[])',
   'function getArticleStats() view returns (uint256, uint256, uint256)',
+  'function getArticlesByTag(string tag) view returns (uint256[])',
+  // User management
+  'function registerUser(string user) returns (bool)',
+  'function getUserInfo(string user) view returns (tuple)',
+  'function getUserIndex(string user) view returns (uint256)',
+  // Events
   'event ArticleSubmitted(uint256 indexed articleId, address indexed author, string title)',
   'event ArticleValidated(uint256 indexed articleId, uint256 score, string status)',
   'event ArticleUpvoted(uint256 indexed articleId, address indexed voter)',
@@ -30,13 +38,21 @@ const CONTENT_REGISTRY_ABI = [
 ];
 
 const REWARD_SYSTEM_ABI = [
+  // Reward calculation and distribution
   'function calculateArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes) view returns (uint256)',
-  'function distributeArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes, uint256 articleId) returns (bool)',
-  'function stakeTokens(address user, uint256 amount) returns (bool)',
-  'function unstakeTokens(address user, uint256 amount) returns (bool)',
-  'function claimRewards(address user) returns (uint256)',
-  'function getPendingRewards(address user) view returns (uint256)',
-  'function getVotingPower(address user) view returns (uint256)',
+  'function distributeArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes, uint256 articleId) returns (tuple)',
+  // AI optimization (view methods with LLM)
+  'function getLlmRewardRecommendation() view returns (string)',
+  'function getTokenPrice(string tokenSymbol) view returns (uint256)',
+  // Staking
+  'function stakeTokens(string user, uint256 amount, uint256 currentTime) returns (bool)',
+  'function unstakeTokens(string user, uint256 amount, uint256 currentTime) returns (bool)',
+  'function getVotingPower(string user) view returns (uint256)',
+  // Reward application (deterministic write)
+  'function applyRewardRates(uint256 articleRewardGen, uint256 upvoteRewardGen) returns (string)',
+  'function getPendingRewards(string user) view returns (uint256)',
+  'function claimRewards(string user) returns (uint256)',
+  // Events
   'event RewardDistributed(address indexed user, uint256 amount, string reason)',
   'event RewardClaimed(address indexed user, uint256 amount)',
   'event TokensStaked(address indexed user, uint256 amount)',

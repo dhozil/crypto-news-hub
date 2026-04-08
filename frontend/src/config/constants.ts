@@ -1,8 +1,8 @@
 // Configuration for contract addresses and network settings
 export const CONTRACT_ADDRESSES = {
   // Deployed GenLayer Bradbury testnet addresses
-  contentRegistry: '0xC9b25E9548CFE0F3E02DB8EE87596C1A2Eb7F520',
-  rewardSystem: '0xF5788C609357DC1440AAC302D55e20946b187a4C',
+  contentRegistry: '0x3ADF9797F3d27a6C2C074f9889172D14DBDAD8d1',
+  rewardSystem: '0x018d2ba4f9CBbF57868ea312315C4C2A38fc7943',
   governance: '0xabcdef1234567890abcdef1234567890abcdef12',
   
   // Local development addresses
@@ -17,7 +17,7 @@ export const NETWORK_CONFIG = {
   // GenLayer Testnet Chain
   testnet: {
     chainId: '0x107D', // 4221 in hex - GenLayer Testnet Chain
-    chainName: 'GenLayer Testnet Chain',
+    chainName: 'Genlayer Bradbury Testnet',
     nativeCurrency: {
       name: 'GEN',
       symbol: 'GEN',
@@ -25,10 +25,12 @@ export const NETWORK_CONFIG = {
     },
     rpcUrls: [
       'https://rpc.testnet-chain.genlayer.com',
+      'https://rpc-bradbury.genlayer.com',
       'https://testnet-chain.genlayer.com',
       'https://genlayer-testnet.public.blastapi.io'
     ],
     blockExplorerUrls: [
+      'https://explorer-bradbury.genlayer.com',
       'https://explorer.testnet-chain.genlayer.com',
       'https://testnet-explorer.genlayer.com'
     ],
