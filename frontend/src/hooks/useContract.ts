@@ -222,6 +222,7 @@ export const useContract = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // @ts-ignore - Ethers.js v6 ABI parsing issue with bool parameter
       const tx = await contract.submitArticle(address, title, content, source, tags, isAIGenerated);
 
       if (DEMO_MODE.enabled) {
