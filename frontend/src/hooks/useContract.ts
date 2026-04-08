@@ -255,6 +255,7 @@ export const useContract = () => {
       return tx.hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit article';
+      console.error('❌ Submit article failed:', error);
       // ✅ FIX 3: isLoading selalu di-reset ke false di catch
       setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
       throw error;
