@@ -17,7 +17,7 @@ const RPC_URLS = [
 // Contract ABIs (simplified for GenLayer)
 const CONTENT_REGISTRY_ABI = [
   // Basic article management
-  'function submitArticle(string title, string content, string source, string[] tags, bool isAIGenerated) returns (uint256)',
+  'function submitArticle(string author, string title, string content, string source, string[] tags, bool isAIGenerated) returns (uint256)',
   'function submitArticleFromUrl(string author, string url, string[] tags, bool isAIGenerated) returns (uint256)',
   'function getArticle(uint256 articleId) view returns (tuple)',
   'function upvoteArticle(uint256 articleId, address voter) returns (bool)',
@@ -222,7 +222,7 @@ export const useContract = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const tx = await contract.submitArticle(title, content, source, tags, isAIGenerated);
+      const tx = await contract.submitArticle(address, title, content, source, tags, isAIGenerated);
 
       if (DEMO_MODE.enabled) {
         const newArticle: Article = {
