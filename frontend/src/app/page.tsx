@@ -1,9 +1,42 @@
+'use client';
+
 import Header from '@/components/Header';
 import NewsFeed from '@/components/NewsFeed';
 import { trendingTopics, newsSources } from '@/data/mockData';
 import { TrendingUp, Globe, Users, Award, BarChart3, Zap, Shield, Star } from 'lucide-react';
+import { useContract } from '@/hooks/useContract';
+import { useEffect, useState } from 'react';
+import { ethers } from 'ethers';
 
 const HomePage = () => {
+  const { articles, userRewards, stakedAmount, fetchArticles, isLoading } = useContract();
+  const [stats, setStats] = useState({
+    totalArticles: 0,
+    approvedArticles: 0,
+    avgQualityScore: 0,
+    totalRewards: '0'
+  });
+
+  useEffect(() => {
+    fetchArticles();
+  }, [fetchArticles]);
+
+  useEffect(() => {
+    if (articles.length > 0) {
+      const approved = articles.filter(a => a.status === 'approved');
+      const avgScore = approved.length > 0 
+        ? approved.reduce((acc, a) => acc + a.score, 0) / approved.length 
+        : 0;
+      
+      setStats({
+        totalArticles: articles.length,
+        approvedArticles: approved.length,
+        avgQualityScore: Math.round(avgScore * 100 * 10) / 10,
+        totalRewards: userRewards || '0'
+      });
+    }
+  }, [articles, userRewards]);
+
   return (
     <div className="main-container">
       <Header />
@@ -11,23 +44,23 @@ const HomePage = () => {
       <div className="main-content">
         {/* Main Content Area */}
         <div className="content-area">
-          {/* Stats Grid */}
+          {/* Stats Grid - Real Data from Blockchain */}
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-number">2,847</div>
-              <div className="stat-label">Active Users</div>
+              <div className="stat-number">{isLoading ? '...' : stats.totalArticles}</div>
+              <div className="stat-label">Total Articles</div>
             </div>
             <div className="stat-card">
-              <div className="stat-number">156</div>
-              <div className="stat-label">Articles Today</div>
+              <div className="stat-number">{isLoading ? '...' : stats.approvedArticles}</div>
+              <div className="stat-label">Approved Articles</div>
             </div>
             <div className="stat-card">
-              <div className="stat-number">12.5K</div>
-              <div className="stat-label">Total Rewards</div>
+              <div className="stat-number">{isLoading ? '...' : parseFloat(ethers.formatEther(stats.totalRewards || '0')).toFixed(1)} GEN</div>
+              <div className="stat-label">Your Rewards</div>
             </div>
             <div className="stat-card">
-              <div className="stat-number">87.3%</div>
-              <div className="stat-label">Quality Score</div>
+              <div className="stat-number">{isLoading ? '...' : stats.avgQualityScore}%</div>
+              <div className="stat-label">Avg Quality Score</div>
             </div>
           </div>
 
