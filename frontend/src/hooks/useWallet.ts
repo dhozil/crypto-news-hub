@@ -13,11 +13,13 @@ const GENLAYER_NETWORK = {
     decimals: 18,
   },
   rpcUrls: [
+    'https://rpc-bradbury.genlayer.com',
     'https://rpc.testnet-chain.genlayer.com',
     'https://genlayer-testnet.public.blastapi.io'
   ],
   blockExplorerUrls: [
-    'https://explorer.testnet-chain.genlayer.com'
+    'https://explorer.testnet-chain.genlayer.com',
+    'https://explorer-bradbury.genlayer.com'
   ],
 };
 

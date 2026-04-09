@@ -1,0 +1,502 @@
+'use client';
+
+// Contract integration hooks for GenLayer using genlayer-js
+import { useState, useEffect, useCallback } from 'react';
+import { createClient, createAccount } from 'genlayer-js';
+import { testnetBradbury } from 'genlayer-js/chains';
+import { useWallet } from './WalletProvider';
+import { CONTRACT_ADDRESSES, DEMO_MODE } from '@/config/constants';
+import { mockArticles } from '@/data/mockData';
+
+// ─────────────────────────────────────────────
+// GenLayer Client Creator
+// ─────────────────────────────────────────────
+const createGenLayerClient = (account: any) => {
+  return createClient({
+    chain: testnetBradbury,
+    account,
+  });
+};
+
+// Contract address
+const CONTRACT_ADDRESS = CONTRACT_ADDRESSES.contentRegistry;
+
+// ─────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────
+export interface Article {
+  id: string;
+  title: string;
+  content: string;
+  summary: string;
+  source: string;
+  author: string;
+  authorAddress: string;
+  timestamp: Date;
+  score: number;
+  upvotes: number;
+  downvotes: number;
+  tags: string[];
+  isAIGenerated: boolean;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface UserInfo {
+  address: string;
+  reputation: number;
+  totalArticles: number;
+  totalUpvotes: number;
+  rewards: string;
+  joinedAt: Date;
+}
+
+export interface ContractState {
+  isLoading: boolean;
+  error: string | null;
+  articles: Article[];
+  userRewards: string;       // GEN rewards dari contract
+  userReputation: number;    // reputation score
+  votingPower: number;       // sama dengan reputation
+  totalArticles: number;
+  approvedArticles: number;
+}
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const convertFromContractFormat = (articleData: any, id: string): Article => ({
+  id,
+  title: articleData.title ?? '',
+  content: articleData.content ?? '',
+  summary: articleData.summary ?? '',
+  source: articleData.source ?? '',
+  author: 'Community Member',
+  authorAddress: articleData.author ?? '',
+  timestamp: new Date(Number(articleData.timestamp) * 1000),
+  score: Number(articleData.score) / 10,
+  upvotes: Number(articleData.upvotes),
+  downvotes: Number(articleData.downvotes),
+  tags: articleData.tags ?? [],
+  isAIGenerated: articleData.is_ai_generated ?? false,
+  status: (articleData.status as 'pending' | 'approved' | 'rejected') ?? 'pending',
+});
+
+// ─────────────────────────────────────────────
+// GenLayer Contract Helpers
+// ─────────────────────────────────────────────
+const readContract = async (client: any, functionName: string, args: any[] = []) => {
+  return await client.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName,
+    args,
+  });
+};
+
+const emitContract = async (client: any, functionName: string, args: any[] = []) => {
+  return await client.emit({
+    address: CONTRACT_ADDRESS,
+    functionName,
+    args,
+  });
+};
+
+// ─────────────────────────────────────────────
+// MOCK CONTRACTS (DEMO MODE)
+// ─────────────────────────────────────────────
+const createMockContentContract = () => ({
+  submitArticle: async () => ({ hash: '0xmockhash_' + Date.now() }),
+  getArticle: async (articleId: string) => {
+    const article = mockArticles.find(a => a.id === articleId);
+    if (!article) throw new Error('Article not found');
+    return article;
+  },
+  upvoteArticle: async () => true,
+  downvoteArticle: async () => true,
+  getArticlesByStatus: async (status: string) =>
+    mockArticles.filter(a => a.status === status).map(a => a.id),
+  getUserArticles: async (user: string) =>
+    mockArticles.filter(a => a.authorAddress === user).map(a => a.id),
+  getArticleStats: async () => {
+    const total = mockArticles.length;
+    const approved = mockArticles.filter(a => a.status === 'approved').length;
+    const pending = mockArticles.filter(a => a.status === 'pending').length;
+    return [total, approved, pending];
+  },
+  getUserInfo: async (_user: string) => null,
+  getUserReputation: async () => BigInt(0),
+  registerUser: async () => true,
+});
+
+// ─────────────────────────────────────────────
+// MAIN HOOK
+// ─────────────────────────────────────────────
+export const useContract = () => {
+  const { signer, isConnected, address } = useWallet();
+
+  const [state, setState] = useState<ContractState>({
+    isLoading: false,
+    error: null,
+    articles: [],
+    userRewards: '0',
+    userReputation: 0,
+    votingPower: 0,
+    totalArticles: 0,
+    approvedArticles: 0,
+  });
+
+  // ─── GenLayer Client ──────────────────────────
+  const getClient = useCallback(() => {
+    if (DEMO_MODE.enabled) return createMockContentContract() as any;
+    if (!address) return null;
+    const account = createAccount(address);
+    return createGenLayerClient(account);
+  }, [address]);
+
+  // ─── Ensure GenLayer network ─────────────────
+  const ensureGenLayerNetwork = useCallback(async (): Promise<boolean> => {
+    if (!window.ethereum) return false;
+    try {
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (Number(chainId) === 4221) return true;
+
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x107D' }],
+        });
+        return true;
+      } catch (switchError: any) {
+        if (switchError.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x107D',
+              chainName: 'Genlayer Bradbury Testnet',
+              nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+              rpcUrls: ['https://rpc-bradbury.genlayer.com'],
+              blockExplorerUrls: ['https://explorer-bradbury.genlayer.com'],
+            }],
+          });
+          return true;
+        }
+        throw switchError;
+      }
+    } catch (error) {
+      console.error('Network switch failed:', error);
+      return false;
+    }
+  }, []);
+
+  // ─── Auto-register user ──────────────────────
+  const ensureUserRegistered = useCallback(async (client: any) => {
+    if (!address) return;
+    try {
+      const userInfo = await readContract(client, 'get_user_info', [address]);
+      if (!userInfo || !userInfo.address) {
+        console.log('📝 Registering new user...');
+        await emitContract(client, 'register_user', [address]);
+        console.log('✅ User registered!');
+      }
+    } catch {
+      try {
+        await emitContract(client, 'register_user', [address]);
+      } catch (regError) {
+        console.warn('Register user failed (mungkin sudah terdaftar):', regError);
+      }
+    }
+  }, [address]);
+
+  // ─── SUBMIT ARTICLE ──────────────────────────
+  const submitArticle = useCallback(async (
+    title: string,
+    content: string,
+    source: string,
+    tags: string[],
+    isAIGenerated: boolean = false
+  ): Promise<string> => {
+    if (!isConnected || !signer || !address) {
+      throw new Error('Wallet not connected. Please connect your MetaMask wallet.');
+    }
+
+    const onCorrectNetwork = await ensureGenLayerNetwork();
+    if (!onCorrectNetwork) {
+      throw new Error('Please switch to GenLayer Bradbury Testnet in MetaMask');
+    }
+
+    const client = getClient();
+    if (!client) throw new Error('Contract not available');
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    console.log('📋 Submit Article Debug:', {
+      contractAddress: CONTRACT_ADDRESS,
+      author: address,
+      title: title.substring(0, 30) + '...',
+      contentLength: content.length,
+      source,
+      tags,
+      isAIGenerated,
+      demoMode: DEMO_MODE.enabled
+    });
+
+    // Test contract connectivity with a simple view call
+    try {
+      const articleCount = await readContract(client, 'get_article_count', []);
+      console.log('📊 Contract responding, article count:', articleCount.toString());
+    } catch (e) {
+      console.error('❌ Contract not responding:', e);
+      throw new Error('Contract not responding. Please check network connection.');
+    }
+
+    try {
+      // Auto-register jika belum terdaftar
+      await ensureUserRegistered(client);
+      console.log('✅ User registration check passed');
+
+      // Submit article via genlayer-js emit
+      const result = await emitContract(client, 'submit_article', [
+        address,      // author ← WAJIB ADA
+        title,
+        content,
+        source,
+        tags,
+        isAIGenerated
+      ]);
+
+      if (DEMO_MODE.enabled) {
+        const newArticle: Article = {
+          id: (mockArticles.length + 1).toString(),
+          title,
+          content,
+          summary: content.substring(0, 200) + '...',
+          source,
+          author: 'Demo User',
+          authorAddress: address,
+          timestamp: new Date(),
+          score: 85,
+          upvotes: 0,
+          downvotes: 0,
+          tags,
+          isAIGenerated,
+          status: 'pending',
+        };
+        mockArticles.push(newArticle);
+        setState(prev => ({ ...prev, articles: [...mockArticles], isLoading: false }));
+        return 'demo_tx_hash';
+      }
+
+      console.log('📤 Transaction result:', result);
+      console.log('✅ Article submitted successfully!');
+
+      // Refresh data setelah submit
+      await fetchArticles();
+      await fetchUserInfo();
+
+      setState(prev => ({ ...prev, isLoading: false }));
+      return result.transaction_hash || result.hash || 'tx_hash';
+
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to submit article';
+      console.error('❌ Submit article error:', error);
+      setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
+      throw error;
+    }
+  }, [isConnected, signer, address, getClient, ensureGenLayerNetwork, ensureUserRegistered]);
+
+  // ─── SUBMIT FROM URL ─────────────────────────
+  const submitArticleFromUrl = useCallback(async (
+    url: string,
+    tags: string[],
+    isAIGenerated: boolean = false
+  ): Promise<string> => {
+    if (!isConnected || !signer || !address) {
+      throw new Error('Wallet not connected');
+    }
+
+    const onCorrectNetwork = await ensureGenLayerNetwork();
+    if (!onCorrectNetwork) throw new Error('Please switch to GenLayer Bradbury Testnet');
+
+    const client = getClient();
+    if (!client) throw new Error('Contract not available');
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      await ensureUserRegistered(client);
+
+      const result = await emitContract(client, 'submit_article_from_url', [address, url, tags, isAIGenerated]);
+
+      await fetchArticles();
+      await fetchUserInfo();
+
+      setState(prev => ({ ...prev, isLoading: false }));
+      return result.transaction_hash || result.hash || 'tx_hash';
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to submit article from URL';
+      setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
+      throw error;
+    }
+  }, [isConnected, signer, address, getClient, ensureGenLayerNetwork, ensureUserRegistered]);
+
+  // ─── FETCH ARTICLES ──────────────────────────
+  const fetchArticles = useCallback(async () => {
+    const client = getClient();
+    if (!client) return;
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      if (DEMO_MODE.enabled) {
+        setState(prev => ({
+          ...prev,
+          articles: mockArticles.map(a => ({ ...a })),
+          totalArticles: mockArticles.length,
+          approvedArticles: mockArticles.filter(a => a.status === 'approved').length,
+          isLoading: false,
+        }));
+        return;
+      }
+
+      // Ambil artikel yang sudah approved
+      let approvedIds: any[] = [];
+      try {
+        approvedIds = await readContract(client, 'get_articles_by_status', ['approved']);
+      } catch (e) {
+        console.warn('getArticlesByStatus failed, fallback ke getAllArticles:', e);
+        approvedIds = await readContract(client, 'get_all_articles', []);
+      }
+
+      const articles: Article[] = [];
+      for (const articleId of approvedIds) {
+        try {
+          const articleData = await readContract(client, 'get_article', [articleId]);
+          if (articleData) {
+            articles.push(convertFromContractFormat(articleData, articleId.toString()));
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch article ${articleId}:`, e);
+        }
+      }
+
+      articles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+      // Ambil stats
+      let totalArticles = articles.length;
+      let approvedArticles = articles.length;
+      try {
+        const [total, approved] = await readContract(client, 'get_article_stats', []);
+        totalArticles = Number(total);
+        approvedArticles = Number(approved);
+      } catch { /* ignore */ }
+
+      setState(prev => ({
+        ...prev,
+        articles,
+        totalArticles,
+        approvedArticles,
+        isLoading: false,
+      }));
+
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to fetch articles';
+      console.error('❌ Fetch articles error:', error);
+      setState(prev => ({
+        ...prev,
+        error: errorMessage,
+        isLoading: false,
+    }
+
+    // Ambil user info dari contract
+    let rewards = BigInt(0);
+    let reputation = BigInt(0);
+
+    try {
+      const userInfo = await client.getUserInfo(address);
+      if (userInfo && userInfo.rewards !== undefined) {
+        rewards = BigInt(userInfo.rewards);
+        reputation = BigInt(userInfo.reputation);
+      }
+    } catch {
+      // User belum terdaftar - return default values, jangan error
+      console.log('User not registered yet, using default values');
+      rewards = BigInt(0);
+      reputation = BigInt(0);
+    }
+
+    setState(prev => ({
+      ...prev,
+      userRewards: rewards.toString(),
+      userReputation: Number(reputation),
+      votingPower: Number(reputation),
+    }));
+
+  } catch (error) {
+    console.error('Failed to fetch user info:', error);
+  }
+}, [isConnected, address, getClient]);
+
+// ─── UPVOTE ──────────────────────────────────
+const upvoteArticle = useCallback(async (articleId: string): Promise<string> => {
+  if (!isConnected || !signer || !address) throw new Error('Wallet not connected');
+
+  const client = getClient();
+  if (!client) throw new Error('Contract not available');
+
+  try {
+    const result = await client.upvoteArticle(articleId, address);
+
+    if (DEMO_MODE.enabled) {
+      const article = mockArticles.find(a => a.id === articleId);
+      if (article) {
+        article.upvotes += 1;
+        setState(prev => ({ ...prev, articles: [...mockArticles] }));
+      }
+      return 'demo_upvote_hash';
+    }
+
+    console.log('📤 Upvote result:', result);
+    await fetchArticles();
+    return result.transaction_hash || result.hash || 'tx_hash';
+  } catch (error: any) {
+    setState(prev => ({ ...prev, error: error?.message ?? 'Failed to upvote' }));
+    throw error;
+  }
+}, [isConnected, signer, address, getClient, fetchArticles]);
+
+// ─── DOWNVOTE ────────────────────────────────
+const downvoteArticle = useCallback(async (articleId: string): Promise<string> => {
+  if (!isConnected || !signer || !address) throw new Error('Wallet not connected');
+
+  const client = getClient();
+  if (!client) throw new Error('Contract not available');
+
+  try {
+    const result = await client.downvoteArticle(articleId, address);
+
+    if (DEMO_MODE.enabled) {
+      const article = mockArticles.find(a => a.id === articleId);
+      if (article) {
+        article.downvotes += 1;
+        setState(prev => ({ ...prev, articles: [...mockArticles] }));
+      }
+      return 'demo_downvote_hash';
+    }
+
+    console.log('📤 Downvote result:', result);
+    await fetchArticles();
+    return result.transaction_hash || result.hash || 'tx_hash';
+  } catch (error: any) {
+    setState(prev => ({ ...prev, error: error?.message ?? 'Failed to downvote' }));
+    throw error;
+  }
+}, [isConnected, signer, address, getClient, fetchArticles]);
+    submitArticleFromUrl,
+    fetchArticles,
+    upvoteArticle,
+    downvoteArticle,
+    refreshData: () => {
+      fetchArticles();
+      fetchUserInfo();
+    },
+  };
+};

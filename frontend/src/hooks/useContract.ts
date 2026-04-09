@@ -1,80 +1,30 @@
 'use client';
 
-// Contract integration hooks for GenLayer
-import { useState, useEffect, useCallback } from 'react';
-import { ethers } from 'ethers';
-// ✅ FIX 1: Import dari WalletProvider (shared Context), bukan langsung dari useWallet
+// Contract integration hooks for GenLayer using genlayer-js
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createClient } from 'genlayer-js';
+import { testnetBradbury } from 'genlayer-js/chains';
 import { useWallet } from './WalletProvider';
-import { CONTRACT_ADDRESSES, DEMO_MODE, NETWORK_CONFIG } from '@/config/constants';
+import { CONTRACT_ADDRESSES, DEMO_MODE } from '@/config/constants';
+import { mockArticles } from '@/data/mockData';
 
-// RPC Failover configuration for GenLayer Testnet Chain
-const RPC_URLS = [
-  'https://rpc.testnet-chain.genlayer.com',
-  'https://testnet-chain.genlayer.com',
-  'https://genlayer-testnet.public.blastapi.io'
-];
+// Contract address
+const CONTRACT_ADDRESS = CONTRACT_ADDRESSES.contentRegistry;
 
-// Contract ABIs (simplified for GenLayer)
-const CONTENT_REGISTRY_ABI = [
-  // Basic article management
-  'function submitArticle(string author, string title, string content, string source, string[] tags, bool isAIGenerated) returns (uint256)',
-  'function submitArticleFromUrl(string author, string url, string[] tags, bool isAIGenerated) returns (uint256)',
-  'function getArticle(uint256 articleId) view returns (tuple)',
-  'function upvoteArticle(uint256 articleId, address voter) returns (bool)',
-  'function downvoteArticle(uint256 articleId, address voter) returns (bool)',
-  'function getArticlesByStatus(string status) view returns (uint256[])',
-  'function getUserArticles(address user) view returns (uint256[])',
-  'function getArticleStats() view returns (uint256, uint256, uint256)',
-  'function getArticlesByTag(string tag) view returns (uint256[])',
-  // User management
-  'function registerUser(string user) returns (bool)',
-  'function getUserInfo(string user) view returns (tuple)',
-  'function getUserIndex(string user) view returns (uint256)',
-  // Events
-  'event ArticleSubmitted(uint256 indexed articleId, address indexed author, string title)',
-  'event ArticleValidated(uint256 indexed articleId, uint256 score, string status)',
-  'event ArticleUpvoted(uint256 indexed articleId, address indexed voter)',
-  'event ArticleDownvoted(uint256 indexed articleId, address indexed voter)'
-];
-
-const REWARD_SYSTEM_ABI = [
-  // Reward calculation and distribution
-  'function calculateArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes) view returns (uint256)',
-  'function distributeArticleReward(address author, uint256 articleScore, uint256 upvotes, uint256 downvotes, uint256 articleId) returns (tuple)',
-  // AI optimization (view methods with LLM)
-  'function getLlmRewardRecommendation() view returns (string)',
-  'function getTokenPrice(string tokenSymbol) view returns (uint256)',
-  // Staking
-  'function stakeTokens(string user, uint256 amount, uint256 currentTime) returns (bool)',
-  'function unstakeTokens(string user, uint256 amount, uint256 currentTime) returns (bool)',
-  'function getVotingPower(string user) view returns (uint256)',
-  // Reward application (deterministic write)
-  'function applyRewardRates(uint256 articleRewardGen, uint256 upvoteRewardGen) returns (string)',
-  'function getPendingRewards(string user) view returns (uint256)',
-  'function claimRewards(string user) returns (uint256)',
-  // Events
-  'event RewardDistributed(address indexed user, uint256 amount, string reason)',
-  'event RewardClaimed(address indexed user, uint256 amount)',
-  'event TokensStaked(address indexed user, uint256 amount)',
-  'event TokensUnstaked(address indexed user, uint256 amount)'
-];
-
-// Create provider with RPC failover
-const createProviderWithFailover = async (): Promise<ethers.JsonRpcProvider> => {
-  for (const rpcUrl of RPC_URLS) {
-    try {
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      await provider.getNetwork();
-      console.log(`Connected to RPC: ${rpcUrl}`);
-      return provider;
-    } catch (error) {
-      console.warn(`RPC ${rpcUrl} failed, trying next...`, error);
-      continue;
-    }
-  }
-  throw new Error('All RPC endpoints failed');
+// GenLayer client with MetaMask provider
+const createGenLayerClientWithMetaMask = (address: string, provider: any) => {
+  console.log('🔥 Creating GenLayer client with address:', address);
+  console.log('🔥 Provider available:', !!provider);
+  const client = createClient({
+    chain: testnetBradbury,
+    account: address as `0x${string}`, // Pass address directly
+    provider: provider, // Pass MetaMask provider
+  });
+  console.log('🔥 Client created, methods:', Object.keys(client).slice(0, 10));
+  return client;
 };
 
+// Types
 export interface Article {
   id: string;
   title: string;
@@ -97,179 +47,307 @@ export interface ContractState {
   error: string | null;
   articles: Article[];
   userRewards: string;
+  userReputation: number;
   votingPower: number;
-  stakedAmount: string;
+  totalArticles: number;
+  approvedArticles: number;
 }
 
-import { mockArticles } from '@/data/mockData';
+// Helpers
+const convertFromContractFormat = (articleData: any, id: string): Article => ({
+  id,
+  title: articleData.title ?? '',
+  content: articleData.content ?? '',
+  summary: articleData.summary ?? '',
+  source: articleData.source ?? '',
+  author: 'Community Member',
+  authorAddress: articleData.author ?? '',
+  timestamp: new Date(Number(articleData.timestamp) * 1000),
+  score: Number(articleData.score) / 10,
+  upvotes: Number(articleData.upvotes),
+  downvotes: Number(articleData.downvotes),
+  tags: articleData.tags ?? [],
+  isAIGenerated: articleData.is_ai_generated ?? false,
+  status: (articleData.status as 'pending' | 'approved' | 'rejected') ?? 'pending',
+});
 
+// Delay helper for rate limiting
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// GenLayer Contract Helpers with retry logic
+const readContract = async (client: any, functionName: string, args: any[] = [], retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await client.readContract({
+        address: CONTRACT_ADDRESS,
+        functionName,
+        args,
+      });
+    } catch (error: any) {
+      if (error?.message?.includes('rate limit') && i < retries - 1) {
+        console.warn(`⏳ Rate limit hit, retrying in ${(i + 1) * 2}s...`);
+        await delay((i + 1) * 2000);
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
+const emitContract = async (client: any, functionName: string, args: any[] = []) => {
+  console.log('🔥 emitContract called:', { functionName, args, contractAddress: CONTRACT_ADDRESS });
+  console.log('🔥 Client methods:', Object.keys(client));
+  
+  if (!client.writeContract) {
+    console.error('❌ writeContract not found on client!');
+    throw new Error('writeContract not available');
+  }
+  
+  return await client.writeContract({
+    address: CONTRACT_ADDRESS,
+    functionName,
+    args,
+  });
+};
+
+// Mock Contracts (Demo Mode)
+const createMockContentContract = () => ({
+  submitArticle: async () => ({ hash: '0xmockhash_' + Date.now() }),
+  getArticle: async (articleId: string) => {
+    const article = mockArticles.find(a => a.id === articleId);
+    if (!article) throw new Error('Article not found');
+    return article;
+  },
+  upvoteArticle: async () => true,
+  downvoteArticle: async () => true,
+  getArticlesByStatus: async (status: string) =>
+    mockArticles.filter(a => a.status === status).map(a => a.id),
+  getUserArticles: async (user: string) =>
+    mockArticles.filter(a => a.authorAddress === user).map(a => a.id),
+  getArticleStats: async () => {
+    const total = mockArticles.length;
+    const approved = mockArticles.filter(a => a.status === 'approved').length;
+    const pending = mockArticles.filter(a => a.status === 'pending').length;
+    return [total, approved, pending];
+  },
+  getUserInfo: async (_user: string) => null,
+  getUserReputation: async () => BigInt(0),
+  registerUser: async () => true,
+});
+
+// Main Hook
 export const useContract = () => {
-  // ✅ FIX 1: Sekarang pakai shared Context, bukan instance baru
   const { signer, isConnected, address } = useWallet();
+
   const [state, setState] = useState<ContractState>({
     isLoading: false,
     error: null,
     articles: [],
     userRewards: '0',
+    userReputation: 0,
     votingPower: 0,
-    stakedAmount: '0',
+    totalArticles: 0,
+    approvedArticles: 0,
   });
 
-  const getContentRegistryContract = useCallback(() => {
-    if (!signer) return null;
-    if (DEMO_MODE.enabled) return createMockContract();
-    return new ethers.Contract(CONTRACT_ADDRESSES.contentRegistry, CONTENT_REGISTRY_ABI, signer);
-  }, [signer]);
+  // Track if registration has been attempted (prevent duplicate tx)
+  const hasRegisteredRef = useRef(false);
+  // Track if already fetching to prevent spam
+  const isFetchingRef = useRef(false);
 
-  const getRewardSystemContract = useCallback(() => {
-    if (!signer) return null;
-    if (DEMO_MODE.enabled) return createMockRewardContract();
-    return new ethers.Contract(CONTRACT_ADDRESSES.rewardSystem, REWARD_SYSTEM_ABI, signer);
-  }, [signer]);
-
-  const createMockContract = () => ({
-    submitArticle: async (title: string, content: string, source: string, tags: string[], isAIGenerated: boolean) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { hash: '0xmockhash' };
-    },
-    getArticle: async (articleId: string) => {
-      const article = mockArticles.find(a => a.id === articleId);
-      if (!article) throw new Error('Article not found');
-      return convertToContractFormat(article);
-    },
-    upvoteArticle: async (articleId: string, voter: string) => {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return true;
-    },
-    downvoteArticle: async (articleId: string, voter: string) => {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return true;
-    },
-    getArticlesByStatus: async (status: string) =>
-      mockArticles.filter(a => a.status === status).map(a => a.id),
-    getUserArticles: async (user: string) =>
-      mockArticles.filter(a => a.authorAddress === user).map(a => a.id),
-    getArticleStats: async () => {
-      const total = mockArticles.length;
-      const approved = mockArticles.filter(a => a.status === 'approved').length;
-      const pending = mockArticles.filter(a => a.status === 'pending').length;
-      return [total, approved, pending];
+  // GenLayer Client
+  const getClient = useCallback(() => {
+    console.log('🔥 getClient called, DEMO_MODE:', DEMO_MODE.enabled, 'address:', address);
+    if (DEMO_MODE.enabled) return createMockContentContract() as any;
+    if (!address || !(window as any).ethereum) {
+      console.log('🔥 getClient returning null - no address or ethereum');
+      return null;
     }
-  });
+    return createGenLayerClientWithMetaMask(address, (window as any).ethereum);
+  }, [address]);
 
-  const createMockRewardContract = () => ({
-    getPendingRewards: async (_user: string) => ethers.parseEther('12.5'),
-    getVotingPower: async (_user: string) => ethers.parseEther('100'),
-    claimRewards: async (_user: string) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return ethers.parseEther('12.5');
-    },
-    stakeTokens: async (_user: string, _amount: bigint) => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return true;
+  // Ensure GenLayer network
+  const ensureGenLayerNetwork = useCallback(async (): Promise<boolean> => {
+    if (!(window as any).ethereum) return false;
+    try {
+      const chainId = await (window as any).ethereum.request({ method: 'eth_chainId' });
+      if (Number(chainId) === 4221) return true;
+
+      try {
+        await (window as any).ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x107D' }],
+        });
+        return true;
+      } catch (switchError: any) {
+        if (switchError.code === 4902) {
+          await (window as any).ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x107D',
+              chainName: 'Genlayer Bradbury Testnet',
+              nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+              rpcUrls: ['https://rpc-bradbury.genlayer.com'],
+              blockExplorerUrls: ['https://explorer-bradbury.genlayer.com'],
+            }],
+          });
+          return true;
+        }
+        throw switchError;
+      }
+    } catch (error) {
+      console.error('Network switch failed:', error);
+      return false;
     }
-  });
+  }, []);
 
-  const convertToContractFormat = (article: any) => ({
-    title: article.title,
-    content: article.content,
-    summary: article.summary,
-    source: article.source,
-    author: article.authorAddress,
-    timestamp: Math.floor(article.timestamp.getTime() / 1000),
-    score: Math.floor(article.score * 1000),
-    upvotes: article.upvotes,
-    downvotes: article.downvotes,
-    tags: article.tags,
-    isAIGenerated: article.isAIGenerated,
-    status: article.status
-  });
+  // Auto-register user with ref flag to prevent duplicates
+  const ensureUserRegistered = useCallback(async (client: any) => {
+    console.log('🔥 ensureUserRegistered called, hasRegisteredRef:', hasRegisteredRef.current);
+    if (!address || hasRegisteredRef.current) {
+      console.log('🔥 Skipping registration - already done or no address');
+      return;
+    }
+    try {
+      console.log('🔥 Checking if user is registered...');
+      const userInfo = await readContract(client, 'get_user_info', [address]);
+      console.log('🔥 userInfo result:', userInfo);
+      if (!userInfo || !userInfo.address) {
+        console.log('📝 User not registered, calling emitContract for register_user...');
+        hasRegisteredRef.current = true; // Mark as attempted
+        const regResult = await emitContract(client, 'register_user', [address]);
+        console.log('✅ User registered! Result:', regResult);
+      } else {
+        console.log('🔥 User already registered');
+        hasRegisteredRef.current = true; // Already registered
+      }
+    } catch (e) {
+      console.log('🔥 Error checking registration, trying to register anyway:', e);
+      try {
+        hasRegisteredRef.current = true; // Mark as attempted even if failed
+        const regResult = await emitContract(client, 'register_user', [address]);
+        console.log('✅ User registered (fallback)! Result:', regResult);
+      } catch (regError) {
+        console.warn('Register user failed:', regError);
+      }
+    }
+  }, [address]);
 
-  const convertFromContractFormat = (articleData: any, id: string): Article => ({
-    id,
-    title: articleData.title,
-    content: articleData.content,
-    summary: articleData.summary,
-    source: articleData.source,
-    author: articleData.author,
-    authorAddress: articleData.author,
-    timestamp: new Date(Number(articleData.timestamp) * 1000),
-    // ✅ FIX 2: Ganti .toNumber() → Number() — kompatibel dengan ethers v6 BigInt
-    score: Number(articleData.score) / 1000,
-    upvotes: Number(articleData.upvotes),
-    downvotes: Number(articleData.downvotes),
-    tags: articleData.tags,
-    isAIGenerated: articleData.isAIGenerated,
-    status: articleData.status
-  });
-
-  // Submit article
+  // Submit Article
   const submitArticle = useCallback(async (
     title: string,
     content: string,
     source: string,
     tags: string[],
     isAIGenerated: boolean = false
-  ) => {
-    // ✅ FIX 3: Cek isConnected dari shared Context (bukan instance terpisah)
-    if (!isConnected || !signer) {
-      throw new Error('Wallet not connected. Please connect your MetaMask wallet.');
+  ): Promise<string> => {
+    if (!isConnected || !signer || !address) {
+      throw new Error('Wallet not connected');
     }
 
-    const contract = getContentRegistryContract();
-    if (!contract) throw new Error('Contract not available');
+    const onCorrectNetwork = await ensureGenLayerNetwork();
+    if (!onCorrectNetwork) {
+      throw new Error('Please switch to GenLayer Bradbury Testnet');
+    }
+
+    // Tunggu 3 detik untuk avoid rate limit dari fetch sebelumnya
+    console.log('🔥 Waiting 3s before submit to avoid rate limit...');
+    await delay(3000);
+
+    const client = getClient();
+    console.log('🔥 Submit Article - Client:', client);
+    if (!client) throw new Error('Contract not available');
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    console.log('🔌 useContract.submitArticle called with:', { address, title: title.substring(0, 20), contentLength: content.length, source });
 
     try {
-      console.log('⏳ Sending transaction to contract:', CONTRACT_ADDRESSES.contentRegistry);
-      // @ts-ignore - Ethers.js v6 ABI parsing issue with bool parameter
-      const tx = await contract.submitArticle(address, title, content, source, tags, isAIGenerated);
-      console.log('✅ Transaction sent:', tx.hash);
+      console.log('🔥 About to ensureUserRegistered...');
+      await ensureUserRegistered(client);
+      console.log('🔥 About to call emitContract for submit_article...');
+
+      let result;
+      try {
+        result = await emitContract(client, 'submit_article', [
+          address, title, content, source, tags, isAIGenerated
+        ]);
+      } catch (emitError) {
+        console.error('🔥 emitContract FAILED:', emitError);
+        throw emitError;
+      }
+      console.log('🔥 emitContract result:', result);
 
       if (DEMO_MODE.enabled) {
         const newArticle: Article = {
           id: (mockArticles.length + 1).toString(),
-          title,
-          content,
+          title, content,
           summary: content.substring(0, 200) + '...',
-          source,
-          author: 'Demo User',
-          authorAddress: address || '',
-          timestamp: new Date(),
-          score: 0.85,
-          upvotes: 0,
-          downvotes: 0,
-          tags,
-          isAIGenerated,
-          status: 'pending'
+          source, author: 'Demo User', authorAddress: address,
+          timestamp: new Date(), score: 85, upvotes: 0, downvotes: 0,
+          tags, isAIGenerated, status: 'pending',
         };
         mockArticles.push(newArticle);
         setState(prev => ({ ...prev, articles: [...mockArticles], isLoading: false }));
-      } else {
-        await tx.wait();
-        await fetchArticles();
+        return 'demo_tx_hash';
       }
 
-      return tx.hash;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to submit article';
-      console.error('❌ Submit article failed:', error);
-      // ✅ FIX 3: isLoading selalu di-reset ke false di catch
+      console.log('📤 Transaction result:', result);
+      await fetchArticles();
+      await fetchUserInfo();
+
+      setState(prev => ({ ...prev, isLoading: false }));
+      return result.transaction_hash || result.hash || 'tx_hash';
+
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to submit article';
+      console.error('❌ Submit article error:', error);
       setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
       throw error;
     }
-  }, [isConnected, signer, getContentRegistryContract, address]);
+  }, [isConnected, signer, address, getClient, ensureGenLayerNetwork, ensureUserRegistered]);
 
-  // Fetch articles
+  // Submit From URL
+  const submitArticleFromUrl = useCallback(async (
+    url: string, tags: string[], isAIGenerated: boolean = false
+  ): Promise<string> => {
+    if (!isConnected || !signer || !address) {
+      throw new Error('Wallet not connected');
+    }
+
+    const onCorrectNetwork = await ensureGenLayerNetwork();
+    if (!onCorrectNetwork) throw new Error('Please switch to GenLayer Bradbury Testnet');
+
+    const client = getClient();
+    if (!client) throw new Error('Contract not available');
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      await ensureUserRegistered(client);
+      const result = await emitContract(client, 'submit_article_from_url', [address, url, tags, isAIGenerated]);
+
+      await fetchArticles();
+      await fetchUserInfo();
+
+      setState(prev => ({ ...prev, isLoading: false }));
+      return result.transaction_hash || result.hash || 'tx_hash';
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to submit article from URL';
+      setState(prev => ({ ...prev, error: errorMessage, isLoading: false }));
+      throw error;
+    }
+  }, [isConnected, signer, address, getClient, ensureGenLayerNetwork, ensureUserRegistered]);
+
+  // Fetch Articles
   const fetchArticles = useCallback(async () => {
-    // ✅ FIX 3: Guard — jangan set isLoading jika tidak ada signer
-    if (!isConnected || !signer) return;
+    if (isFetchingRef.current) {
+      console.log('🔥 Skipping fetchArticles - already fetching');
+      return;
+    }
+    
+    const client = getClient();
+    if (!client) return;
 
-    const contract = getContentRegistryContract();
-    if (!contract) return;
-
+    isFetchingRef.current = true;
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
@@ -277,168 +355,165 @@ export const useContract = () => {
         setState(prev => ({
           ...prev,
           articles: mockArticles.map(a => ({ ...a })),
-          isLoading: false
+          totalArticles: mockArticles.length,
+          approvedArticles: mockArticles.filter(a => a.status === 'approved').length,
+          isLoading: false,
         }));
         return;
       }
 
-      const approvedArticleIds = await contract.getArticlesByStatus('approved');
-      const articles: Article[] = [];
+      let approvedIds: any[] = [];
+      try {
+        approvedIds = await readContract(client, 'get_articles_by_status', ['approved']);
+      } catch (e) {
+        console.warn('getArticlesByStatus failed:', e);
+        approvedIds = await readContract(client, 'get_all_articles', []);
+      }
 
-      for (const articleId of approvedArticleIds) {
-        const articleData = await contract.getArticle(articleId);
-        articles.push(convertFromContractFormat(articleData, articleId.toString()));
+      const articles: Article[] = [];
+      for (const articleId of approvedIds) {
+        try {
+          const articleData = await readContract(client, 'get_article', [articleId]);
+          if (articleData) {
+            articles.push(convertFromContractFormat(articleData, articleId.toString()));
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch article ${articleId}:`, e);
+        }
       }
 
       articles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-      setState(prev => ({ ...prev, articles, isLoading: false }));
 
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch articles';
-      // ✅ FIX 3: isLoading selalu false di catch, pakai mock sebagai fallback
+      let totalArticles = articles.length;
+      let approvedArticles = articles.length;
+      try {
+        const [total, approved] = await readContract(client, 'get_article_stats', []);
+        totalArticles = Number(total);
+        approvedArticles = Number(approved);
+      } catch { /* ignore */ }
+
       setState(prev => ({
-        ...prev,
-        error: errorMessage,
-        isLoading: false,
-        articles: DEMO_MODE.enabled ? mockArticles.map(a => ({ ...a })) : prev.articles
+        ...prev, articles, totalArticles, approvedArticles, isLoading: false,
       }));
+      isFetchingRef.current = false;
+
+    } catch (error: any) {
+      const errorMessage = error?.message ?? 'Failed to fetch articles';
+      console.error('❌ Fetch articles error:', error);
+      setState(prev => ({
+        ...prev, error: errorMessage, isLoading: false,
+        articles: DEMO_MODE.enabled ? mockArticles.map(a => ({ ...a })) : prev.articles,
+      }));
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [isConnected, signer, getContentRegistryContract]);
+  }, [getClient]);
 
-  // Upvote article
-  const upvoteArticle = useCallback(async (articleId: string) => {
-    if (!isConnected || !signer) throw new Error('Wallet not connected');
+  // Fetch User Info
+  const fetchUserInfo = useCallback(async () => {
+    if (!isConnected || !address) return;
 
-    const contract = getContentRegistryContract();
-    if (!contract) throw new Error('Contract not available');
+    const client = getClient();
+    if (!client) return;
 
     try {
-      const tx = await contract.upvoteArticle(articleId, address!);
       if (DEMO_MODE.enabled) {
-        const article = mockArticles.find(a => a.id === articleId);
-        if (article) {
-          article.upvotes += 1;
-          setState(prev => ({ ...prev, articles: [...mockArticles] }));
-        }
-      } else {
-        await tx.wait();
-        await fetchArticles();
+        setState(prev => ({ ...prev, userRewards: '12.5', userReputation: 100, votingPower: 100 }));
+        return;
       }
-      return tx.hash;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upvote';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      throw error;
-    }
-  }, [isConnected, signer, address, getContentRegistryContract, fetchArticles]);
 
-  // Downvote article
-  const downvoteArticle = useCallback(async (articleId: string) => {
-    if (!isConnected || !signer) throw new Error('Wallet not connected');
+      let rewards = BigInt(0);
+      let reputation = BigInt(0);
 
-    const contract = getContentRegistryContract();
-    if (!contract) throw new Error('Contract not available');
-
-    try {
-      const tx = await contract.downvoteArticle(articleId, address!);
-      if (DEMO_MODE.enabled) {
-        const article = mockArticles.find(a => a.id === articleId);
-        if (article) {
-          article.downvotes += 1;
-          setState(prev => ({ ...prev, articles: [...mockArticles] }));
+      try {
+        const userInfo = await readContract(client, 'get_user_info', [address]);
+        if (userInfo && userInfo.rewards !== undefined) {
+          rewards = BigInt(userInfo.rewards);
+          reputation = BigInt(userInfo.reputation);
         }
-      } else {
-        await tx.wait();
-        await fetchArticles();
+      } catch {
+        console.log('User not registered yet');
       }
-      return tx.hash;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to downvote';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      throw error;
-    }
-  }, [isConnected, signer, address, getContentRegistryContract, fetchArticles]);
-
-  // Fetch user rewards
-  const fetchUserRewards = useCallback(async () => {
-    if (!isConnected || !signer || !address) return;
-
-    const contract = getRewardSystemContract();
-    if (!contract) return;
-
-    try {
-      const pendingRewards = await contract.getPendingRewards(address);
-      const votingPower = await contract.getVotingPower(address);
 
       setState(prev => ({
         ...prev,
-        userRewards: ethers.formatEther(pendingRewards),
-        // ✅ FIX 2: Number() bukan .toNumber() untuk ethers v6
-        votingPower: Number(ethers.formatEther(votingPower))
+        userRewards: rewards.toString(),
+        userReputation: Number(reputation),
+        votingPower: Number(reputation),
       }));
+
     } catch (error) {
-      console.error('Failed to fetch user rewards:', error);
+      console.error('Failed to fetch user info:', error);
     }
-  }, [isConnected, signer, address, getRewardSystemContract]);
+  }, [isConnected, address, getClient]);
 
-  // Claim rewards
-  const claimRewards = useCallback(async () => {
-    if (!isConnected || !signer) throw new Error('Wallet not connected');
+  // Upvote
+  const upvoteArticle = useCallback(async (articleId: string): Promise<string> => {
+    if (!isConnected || !signer || !address) throw new Error('Wallet not connected');
 
-    const contract = getRewardSystemContract();
-    if (!contract) throw new Error('Contract not available');
+    const client = getClient();
+    if (!client) throw new Error('Contract not available');
 
     try {
-      const tx = await contract.claimRewards(address!);
-      await tx.wait();
-      await fetchUserRewards();
-      return tx.hash;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to claim rewards';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      const result = await emitContract(client, 'upvote_article', [articleId, address]);
+
+      if (DEMO_MODE.enabled) {
+        const article = mockArticles.find(a => a.id === articleId);
+        if (article) { article.upvotes += 1; }
+        return 'demo_upvote_hash';
+      }
+
+      console.log('📤 Upvote result:', result);
+      await fetchArticles();
+      return result.transaction_hash || result.hash || 'tx_hash';
+    } catch (error: any) {
+      setState(prev => ({ ...prev, error: error?.message ?? 'Failed to upvote' }));
       throw error;
     }
-  }, [isConnected, signer, address, getRewardSystemContract, fetchUserRewards]);
+  }, [isConnected, signer, address, getClient, fetchArticles]);
 
-  // Stake tokens
-  const stakeTokens = useCallback(async (amount: string) => {
-    if (!isConnected || !signer) throw new Error('Wallet not connected');
+  // Downvote
+  const downvoteArticle = useCallback(async (articleId: string): Promise<string> => {
+    if (!isConnected || !signer || !address) throw new Error('Wallet not connected');
 
-    const contract = getRewardSystemContract();
-    if (!contract) throw new Error('Contract not available');
+    const client = getClient();
+    if (!client) throw new Error('Contract not available');
 
     try {
-      const amountWei = ethers.parseEther(amount);
-      const tx = await contract.stakeTokens(address!, amountWei);
-      await tx.wait();
-      await fetchUserRewards();
-      return tx.hash;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to stake tokens';
-      setState(prev => ({ ...prev, error: errorMessage }));
+      const result = await emitContract(client, 'downvote_article', [articleId, address]);
+
+      if (DEMO_MODE.enabled) {
+        const article = mockArticles.find(a => a.id === articleId);
+        if (article) { article.downvotes += 1; }
+        return 'demo_downvote_hash';
+      }
+
+      console.log('📤 Downvote result:', result);
+      await fetchArticles();
+      return result.transaction_hash || result.hash || 'tx_hash';
+    } catch (error: any) {
+      setState(prev => ({ ...prev, error: error?.message ?? 'Failed to downvote' }));
       throw error;
     }
-  }, [isConnected, signer, address, getRewardSystemContract, fetchUserRewards]);
+  }, [isConnected, signer, address, getClient, fetchArticles]);
 
-  // Auto-fetch data when wallet connects
+  // Auto fetch on wallet connect - NO AUTO REGISTRATION
   useEffect(() => {
-    if (isConnected && signer) {
+    if (isConnected && signer && address) {
       fetchArticles();
-      fetchUserRewards();
+      fetchUserInfo();
+      // Reset registration flag on disconnect
+      hasRegisteredRef.current = false;
     }
-  }, [isConnected, signer]);
+  }, [isConnected, signer, address]); // Minimal deps - only wallet connection changes
 
   return {
     ...state,
     submitArticle,
+    submitArticleFromUrl,
     fetchArticles,
     upvoteArticle,
     downvoteArticle,
-    claimRewards,
-    stakeTokens,
-    refreshData: () => {
-      fetchArticles();
-      fetchUserRewards();
-    }
+    refreshData: () => { fetchArticles(); fetchUserInfo(); },
   };
 };
