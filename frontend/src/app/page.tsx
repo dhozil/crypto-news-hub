@@ -20,7 +20,7 @@ const HomePage = () => {
     const articlesToday = articles.filter(a => new Date(a.timestamp) >= today).length;
     
     // Total rewards (format as K if > 1000)
-    const totalRewards = userRewards.totalEarned || 0;
+    const totalRewards = parseFloat(userRewards) || 0;
     
     // Average quality score
     const avgScore = articles.length > 0
