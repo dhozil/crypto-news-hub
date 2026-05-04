@@ -331,14 +331,14 @@ class ContentRegistry(gl.Contract):
             except:
                 return False
         
-        # Try to extract with LLM - use leader result directly (deterministic extraction)
+        # Try to extract with LLM - use consensus with leader-validator pattern
         title = ""
         content = ""
         extraction_success = False
         
         try:
-            # Get leader result directly without strict consensus
-            extract_response = gl.nondet.exec_prompt(extract_prompt)
+            # Use leader-validator consensus for extraction
+            extract_response = gl.vm.run_nondet_unsafe(extract_leader, extract_validator)
             extracted_data = json.loads(extract_response)
             title = extracted_data.get("title", "").strip()
             content = extracted_data.get("content", "").strip()
