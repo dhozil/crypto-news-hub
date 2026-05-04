@@ -1,8 +1,8 @@
 // Configuration for contract addresses and network settings
 export const CONTRACT_ADDRESSES = {
   // Deployed GenLayer Bradbury testnet addresses (UPDATED - May 4, 2026)
-  contentRegistry: '0x6fC9fD7c4080626feef7679d15F28c7145059A49',
-  rewardSystem: '0x040c2D608222Aaeff485709e9648613614E0BEF3',
+  contentRegistry: '0xD64B3ff515Af4FA6a2f849C3EA68442cc0D21424',
+  rewardSystem: '0x86eaecB4375f0c0901a33B3a99cDB9524D38c3Ca',
   governance: '0x1111111111111111111111111111111111111111',
   
   // Local development addresses
